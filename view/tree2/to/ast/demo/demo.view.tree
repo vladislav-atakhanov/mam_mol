@@ -1,0 +1,7 @@
+$mol_view_tree2_to_ast_demo $mol_view
+	src \src
+	sub /
+		\test
+	-
+		<= Code $mol_text_code
+			text <= content
