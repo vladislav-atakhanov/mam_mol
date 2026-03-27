@@ -1,7 +1,39 @@
 $mol_view_tree2_to_ast_demo $mol_view
-	src \src
+	style *
+		display \grid
+		\grid-template-columns
+			\1fr 1fr 1fr
 	sub /
-		\test
-	-
+		<= Text $mol_textarea
+			value? <=> src?
 		<= Code $mol_text_code
 			text <= content
+		<= Js $mol_text_code
+			text <= js
+	js \
+	src? \
+		\$my_user_profile $mol_view
+		\	username \1 пункт: нигде нету ?
+		\	bio \
+		\		\2 пункт: все понял, везде лучше писать *
+		\		\3 пункт: многостроки
+		\	age null
+		\	rating 0.0
+		\	status \active
+		\	welcome_msg @ \4 пункт: Строка с переводом без \
+		\	welcome_description @ \
+		\		\Строка с переводом
+		\		\многострочная
+		\	punkt5 \
+		\		\ Пятый пункт никак здесь не показать
+		\		\ Зато видно что <=> без вопросов
+		\	editor $my_profile_editor
+		\		score => score
+		\		some => Some*
+		\		child <= Child $my_child
+		\			score <=> child
+		\
+		\$my_hi $mol_view
+		\
+		\Hello World
+		\
