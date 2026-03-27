@@ -1,0 +1,21 @@
+[mol_list] {
+	will-change: contents;
+	display: flex;
+	flex-direction: column;
+	flex-shrink: 0;
+	max-width: 100%;
+	/* display: flex;
+	align-items: stretch;
+	align-content: stretch; */
+	transition: none;
+	min-height: 1.5rem;
+	/* will-change: contents; */
+}
+
+[mol_list_gap_before] ,
+[mol_list_gap_after] {
+	display: block !important;
+	flex: none;
+	transition: none;
+	overflow-anchor: none;
+}
