@@ -2,15 +2,17 @@ $mol_view_tree2_to_ast_demo $mol_view
 	style *
 		display \grid
 		\grid-template-columns
-			\1fr 1fr 1fr
+			\2fr 2fr 1fr
 	sub /
-		<= Text $mol_textarea
+		<= ScrollText $mol_scroll sub / <= Text $mol_textarea
 			value? <=> src?
-		<= Code $mol_text_code
+		<= ScrollCode $mol_scroll sub / <= Code $mol_text_code
+			sidebar_showed true
 			text <= content
-		<= Js $mol_text_code
+		<= ScrollJs $mol_scroll sub / <= Js $mol_text_code
 			text <= js
 	js \
+	content \
 	src? \
 		\$my_user_profile $mol_view
 		\	username \1 пункт: нигде нету ?
@@ -32,6 +34,15 @@ $mol_view_tree2_to_ast_demo $mol_view
 		\		some => Some*
 		\		child <= Child $my_child
 		\			score <=> child
+		\	dict *
+		\		^
+		\		hello \world
+		\		salam <= hello
+		\		^
+		\	list /
+		\		^
+		\		<= hello \world
+		\		^
 		\
 		\$my_hi $mol_view
 		\

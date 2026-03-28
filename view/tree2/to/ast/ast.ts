@@ -1,14 +1,39 @@
 namespace $ {
 	const err = $mol_view_tree2_error_str
 
-	const { begin, end, latin_only, or, optional, repeat_greedy } = $mol_regexp
+	type Type = (typeof types)[number]
+	const Type = (tree: $mol_tree2, type: Type) => [tree.struct('type', [tree.data(type)])]
+	const Literal = (tree: $mol_tree2) => [...Type(tree, 'literal'), tree.struct(`raw`, [tree])]
+	const Class = (tree: $mol_tree2, parent: $mol_tree2, props: $mol_tree2[]) => [
+		...Type(tree, 'class'),
+		tree.struct('extends', [parent.data(parent.type)]),
+		tree.struct('properties', [object(parent, props)]),
+	]
+	function Property(this: $, prop: $mol_tree2, ...other: $mol_tree2[]) {
+		const { name, key, next } = this.$mol_view_tree2_prop_parts(prop)
+		return prop.struct(name, [
+			object(prop, [
+				...other,
 
-	const prop_signature = $mol_regexp.from([
-		begin,
-		{ name: repeat_greedy(latin_only, 1) },
-		{ key: optional(['*', repeat_greedy(latin_only, 0)]) },
-		end,
-	])
+				...(key
+					? [prop.struct('key', [key.length === 1 ? prop.struct('true', []) : prop.data(key.slice(1))])]
+					: []),
+				...(next ? [prop.struct('writable', [prop.struct(next ? 'true' : 'false', [])])] : []),
+			]),
+		])
+	}
+
+	function name_of(this: $, prop: $mol_tree2) {
+		return this.$mol_view_tree2_prop_parts(prop).name
+	}
+
+	const array = (root: $mol_tree2, items: readonly $mol_tree2[]) => root.struct('/', items)
+	const object = (root: $mol_tree2, items: readonly $mol_tree2[]) => root.struct('*', items)
+	const types = ['literal', 'class', 'pull', 'put', 'bidi', 'dictionary', 'list', 'i18n'] as const
+
+	function Arrow(this: $, v: $mol_tree2, type: 'bidi' | 'put') {
+		return [...Type(v, type), v.struct('property', [v.data(name_of.call(this, v.kids[0]))])]
+	}
 
 	export function $mol_view_tree2_to_ast(this: $, tree: $mol_tree2) {
 		const descr = this.$mol_view_tree2_classes(tree)
@@ -17,54 +42,120 @@ namespace $ {
 			const parent = this.$mol_view_tree2_child(klass)
 			const props = this.$mol_view_tree2_class_props(klass)
 			return klass.struct(klass.type, [
-				klass.struct('*', [
-					klass.struct('type', [parent.data(parent.type)]),
-					klass.struct('properties', [
-						klass.struct(
-							'*',
-							props.map(prop => {
-								const { name = '', key = '' } = [...prop.type.matchAll(prop_signature)][0]?.groups ?? {}
-								const keywords = {
-									null: 'null',
-									false: 'false',
-									true: 'true',
-									Infinity: 'Infinity',
-									'-Infinity': '-Infinity',
+				object(
+					klass,
+					Class(
+						klass,
+						parent,
+						props.map(prop => {
+							const name = name_of.call(this, prop)
+							const keywords = Object.fromEntries(
+								['null', 'false', 'true', 'Infinity', '-Infinity', 'NaN'].map(k => [k, k]),
+							)
+							const extend = (tree: $mol_tree2) => {
+								if (tree.type === '^') {
+									const prop = tree.kids[0]
+									return prop
+										? tree.data(prop.type)
+										: object(tree, [tree.struct('self', [tree.struct('true')])])
 								}
-								const operators = ['=', '-', '<=>', '<=', '=>', '']
-								const val = prop.hack({
+							}
+							const val = prop.hack(
+								{
 									...Object.fromEntries(
-										operators.map(o => [o, val => [val.struct(`"${o}"`, [val])]]),
+										Object.entries(keywords).map(([k, l]) => [k, t => Literal(t)]),
 									),
-									...Object.fromEntries(
-										Object.entries(keywords).map(([k, l]) => [
-											k,
-											v => [v.struct(`keyword`, [v.data(l)])],
+									'=': v => {
+										const path = []
+										let kid = v.kids[0]
+										while (kid) {
+											path.push(kid.data(kid.type))
+											kid = kid.kids[0]
+										}
+										return [...Type(v, 'pull'), v.struct('path', [array(v, path)])]
+									},
+									'<=': v => Arrow.call(this, v, 'put'),
+									'<=>': v => Arrow.call(this, v, 'bidi'),
+									'@': (v, b, { chain }) => [
+										...Type(v, 'i18n'),
+										v.struct(`raw`, v.kids),
+										v.struct('id', [
+											v.data(`${klass.type}_${name}${chain.length ? `_${chain}` : ''}`),
 										]),
-									),
-								})
+									],
+									'/': (v, belt, context) => [
+										...Type(v, 'list'),
+										v.struct('items', [
+											array(
+												v,
+												v.kids
+													.map(k => extend(k) ?? [object(k, k.hack_self(belt, context))])
+													.flat(),
+											),
+										]),
+									],
+									'*': (v, belt, context) => [
+										...Type(v, 'dictionary'),
+										v.struct('properties', [
+											array(
+												v,
+												v.kids.map(
+													k =>
+														extend(k) ??
+														array(k, [
+															k.data(k.type),
+															object(
+																k,
+																k.kids.flatMap(k =>
+																	k.hack_self(belt, {
+																		...context,
+																		chain: [
+																			...(context.chain ?? []),
+																			k.type.replace(/\?\w*$/, ''),
+																		],
+																	}),
+																),
+															),
+														]),
+												),
+											),
+										]),
+									],
+									'': (input, belt, context) => {
+										if (input.type && $mol_tree2_js_is_number(input.type)) return Literal(input)
 
-								return prop.struct(name, [
-									prop.struct('*', [
-										...(key
-											? [
-													prop.struct('key', [
-														key.length === 1
-															? prop.struct('true', [])
-															: prop.data(key.slice(1)),
-													]),
-												]
-											: []),
-										...val,
-									]),
-								])
-							}),
-						),
-					]),
-				]),
+										if ($mol_view_tree2_class_match(input)) {
+											const overrides = input.kids
+												.filter(over => {
+													if (over.type[0] === '/') return false
+													const bind = over.kids[0]
+													if (bind.type === '=>') return false
+													return true
+												})
+												.map(over =>
+													Property.call(
+														this,
+														over,
+														...over.hack(belt, { chain: [over.type] }),
+													),
+												)
+
+											return Class(input, input, overrides)
+										}
+
+										return Literal(input)
+									},
+								},
+								{ chain: [] as string[] },
+							)
+
+							return Property.call(this, prop, ...val)
+						}),
+					),
+				),
 			])
 		})
 
-		return descr.struct('/', classes)
+		return object(descr, classes)
 	}
 }
