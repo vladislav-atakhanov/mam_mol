@@ -83,45 +83,60 @@ namespace $ {
 											v.data(`${klass.type}_${name}${chain.length ? `_${chain}` : ''}`),
 										]),
 									],
-									'/': (v, belt, context) => [
-										...Type(v, 'list'),
-										v.struct('items', [
-											array(
-												v,
-												v.kids
-													.map(k => extend(k) ?? [object(k, k.hack_self(belt, context))])
-													.flat(),
-											),
-										]),
-									],
-									'*': (v, belt, context) => [
-										...Type(v, 'dictionary'),
-										v.struct('properties', [
-											array(
-												v,
-												v.kids.map(
-													k =>
-														extend(k) ??
-														array(k, [
-															k.data(k.type),
-															object(
-																k,
-																k.kids.flatMap(k =>
-																	k.hack_self(belt, {
-																		...context,
-																		chain: [
-																			...(context.chain ?? []),
-																			k.type.replace(/\?\w*$/, ''),
-																		],
-																	}),
-																),
-															),
-														]),
-												),
-											),
-										]),
-									],
 									'': (input, belt, context) => {
+										if (input.type[0] === '*') {
+											return [
+												...Type(input, 'dictionary'),
+												input.struct('properties', [
+													array(
+														input,
+														input.kids.map(
+															k =>
+																extend(k) ??
+																array(k, [
+																	k.data(k.type),
+																	object(
+																		k,
+																		k.kids.flatMap(k =>
+																			k.hack_self(belt, {
+																				...context,
+																				chain: [
+																					...(context.chain ?? []),
+																					k.type.replace(/\?\w*$/, ''),
+																				],
+																			}),
+																		),
+																	),
+																]),
+														),
+													),
+												]),
+												...(input.type.length > 0
+													? [input.struct('type', [input.data(input.type.substring(1))])]
+													: []),
+											]
+										}
+										if (input.type[0] === '/') {
+											return [
+												...Type(input, 'list'),
+												input.struct('items', [
+													array(
+														input,
+														input.kids
+															.map(
+																k =>
+																	extend(k) ?? [
+																		object(k, k.hack_self(belt, context)),
+																	],
+															)
+															.flat(),
+													),
+												]),
+												...(input.type.length > 0
+													? [input.struct('type', [input.data(input.type.substring(1))])]
+													: []),
+											]
+										}
 										if (input.type && $mol_tree2_js_is_number(input.type)) return Literal(input)
 
 										if ($mol_view_tree2_class_match(input)) {
