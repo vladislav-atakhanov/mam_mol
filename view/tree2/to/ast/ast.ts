@@ -8,10 +8,12 @@ namespace $ {
 		tree.struct(`raw`, [tree]),
 		...(tree.kids.length > 0
 			? [
-					tree.struct(
-						`hint`,
-						tree.kids.map(k => k.data(k.type)),
-					),
+					tree.struct(`hint`, [
+						array(
+							tree,
+							tree.kids.map(k => k.data(k.type)),
+						),
+					]),
 				]
 			: []),
 	]
@@ -121,8 +123,12 @@ namespace $ {
 														),
 													),
 												]),
-												...(input.type.length > 0
-													? [input.struct('hint', [input.data(input.type.substring(1))])]
+												...(input.type.length > 1
+													? [
+															input.struct('hint', [
+																array(input, [input.data(input.type.substring(1))]),
+															]),
+														]
 													: []),
 											]
 										}
@@ -142,8 +148,12 @@ namespace $ {
 															.flat(),
 													),
 												]),
-												...(input.type.length > 0
-													? [input.struct('hint', [input.data(input.type.substring(1))])]
+												...(input.type.length > 1
+													? [
+															input.struct('hint', [
+																array(input, [input.data(input.type.substring(1))]),
+															]),
+														]
 													: []),
 											]
 										}
@@ -185,6 +195,7 @@ namespace $ {
 	}
 
 	type PropertyName = string & { __brand: 'PropertyName' }
+	type Hint = string[]
 	type _Ast = {
 		class: {
 			extends: string
@@ -193,10 +204,10 @@ namespace $ {
 		pull: { path: PropertyName[] }
 		put: { property: PropertyName }
 		bidi: { property: PropertyName }
-		literal: { raw: string | number | boolean } | { raw: null; hint?: string }
+		literal: { raw: string | number | boolean } | { raw: null; hint?: Hint }
 		i18n: { raw: string; id: string }
-		dictionary: { properties: Array<{ self: true } | PropertyName | [string, Property]> }
-		list: { properties: Array<{ self: true } | PropertyName | Property> }
+		dictionary: { properties: Array<{ self: true } | PropertyName | [string, Property]>; hint?: Hint }
+		list: { properties: Array<{ self: true } | PropertyName | Property>; hint?: Hint }
 	}
 	type Ast = { [K in keyof _Ast]: { type: K } & _Ast[K] }
 	export type $mol_view_tree2_ast_types = Ast
