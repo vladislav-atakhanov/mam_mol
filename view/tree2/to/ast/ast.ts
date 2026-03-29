@@ -22,28 +22,36 @@ namespace $ {
 		tree.struct('extends', [parent.data(parent.type)]),
 		tree.struct('properties', [object(parent, props)]),
 	]
-	function Property(this: $, prop: $mol_tree2, ...other: $mol_tree2[]) {
-		const { name, key, next } = this.$mol_view_tree2_prop_parts(prop)
-		return prop.struct(name, [
-			object(prop, [
+	function Property(this: $, tree: $mol_tree2, other: $mol_tree2[] = [], keyName = 'key') {
+		const { name, key, next } = this.$mol_view_tree2_prop_parts(tree)
+		return tree.struct(name, [
+			object(tree, [
 				...other,
 				...(key
-					? [prop.struct('key', [key.length === 1 ? prop.struct('true', []) : prop.data(key.slice(1))])]
+					? [tree.struct(keyName, [key.length === 1 ? tree.struct('true') : tree.data(key.slice(1))])]
 					: []),
-				...(next ? [prop.struct('writable', [prop.struct(next ? 'true' : 'false', [])])] : []),
+				...(next ? [tree.struct('writable', [tree.struct('true')])] : []),
 			]),
 		])
 	}
 
-	function name_of(this: $, prop: $mol_tree2) {
-		return this.$mol_view_tree2_prop_parts(prop).name
+	function parts(this: $, prop: $mol_tree2) {
+		return this.$mol_view_tree2_prop_parts(prop)
 	}
 
-	const array = (root: $mol_tree2, items: readonly $mol_tree2[]) => root.struct('/', items)
-	const object = (root: $mol_tree2, items: readonly $mol_tree2[]) => root.struct('*', items)
+	const array = (tree: $mol_tree2, items: readonly $mol_tree2[]) => tree.struct('/', items)
+	const object = (tree: $mol_tree2, items: readonly $mol_tree2[]) => tree.struct('*', items)
 
-	function Arrow(this: $, v: $mol_tree2, type: (typeof types)['bidi'] | (typeof types)['put']) {
-		return [...Type(v, type), v.struct('property', [v.data(name_of.call(this, v.kids[0]))])]
+	function Arrow(this: $, tree: $mol_tree2, type: (typeof types)['bidi'] | (typeof types)['put']) {
+		const { name, key } = parts.call(this, tree.kids[0])
+
+		return [
+			...Type(tree, type),
+			tree.struct('property', [tree.data(name)]),
+			...(key
+				? [tree.struct('key', [key.length === 1 ? tree.struct('true', []) : tree.data(key.slice(1))])]
+				: []),
+		]
 	}
 
 	export function $mol_view_tree2_to_ast(this: $, tree: $mol_tree2) {
@@ -59,7 +67,7 @@ namespace $ {
 						klass,
 						parent,
 						props.map(prop => {
-							const name = name_of.call(this, prop)
+							const { name } = parts.call(this, prop)
 							const keywords = Object.fromEntries(
 								['false', 'true', 'Infinity', '-Infinity', 'NaN'].map(k => [k, k]),
 							)
@@ -171,7 +179,8 @@ namespace $ {
 													Property.call(
 														this,
 														over,
-														...over.hack(belt, { chain: [over.type] }),
+														over.hack(belt, { chain: [over.type] }),
+														'parent_key',
 													),
 												)
 
@@ -184,14 +193,54 @@ namespace $ {
 								{ chain: [] as string[] },
 							)
 
-							return Property.call(this, prop, ...val)
+							return Property.call(this, prop, val)
 						}),
 					),
 				),
 			])
 		})
 
-		return object(descr, classes)
+		const ast = this.$mol_tree2_to_json(object(descr, classes)) as $mol_view_tree2_ast
+
+		Object.entries(ast).forEach(([className, root]) => {
+			Object.entries(root.properties).forEach(([name, klass]) => {
+				if (klass.type !== types.class) return
+				Object.entries(klass.properties).forEach(([n, prop]) => {
+					switch (prop.type) {
+						case types.bidi: {
+							const property = root.properties[prop.property]
+							if (property) {
+								property.writable = true
+								property.key = prop.key
+							} else
+								root.properties[prop.property] = {
+									type: 'literal',
+									raw: null,
+									hint: [klass.extends, n],
+									writable: true,
+									key: prop.key,
+								}
+							break
+						}
+						case types.put: {
+							console.log(`${name}.${n} <= ${prop.property}`)
+							const property = root.properties[prop.property]
+							if (!property) {
+								root.properties[prop.property] = {
+									type: 'literal',
+									raw: null,
+									hint: [klass.extends, n],
+									key: prop.key,
+								}
+							}
+							break
+						}
+					}
+				})
+			})
+		})
+
+		return ast
 	}
 
 	type PropertyName = string & { __brand: 'PropertyName' }
@@ -199,7 +248,7 @@ namespace $ {
 	type _Ast = {
 		class: {
 			extends: string
-			properties: Record<PropertyName, Property & { key: boolean; writable: boolean }>
+			properties: Record<PropertyName, Property & { key?: boolean; writable?: boolean; parent_key?: boolean }>
 		}
 		pull: { path: PropertyName[] }
 		put: { property: PropertyName }
