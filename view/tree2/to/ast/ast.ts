@@ -74,9 +74,12 @@ namespace $ {
 							const extend = (tree: $mol_tree2) => {
 								if (tree.type === '^') {
 									const prop = tree.kids[0]
-									return prop
-										? tree.data(prop.type)
-										: object(tree, [tree.struct('self', [tree.struct('true')])])
+									if (!prop) return object(tree, [tree.struct('extend', [tree.struct('null')])])
+									const { name, key } = parts.call(this, prop)
+									return object(tree, [
+										tree.struct('extend', [tree.data(name)]),
+										...(key ? [tree.struct('key', [tree.struct('true')])] : []),
+									])
 								}
 							}
 							const val = prop.hack(
@@ -202,41 +205,68 @@ namespace $ {
 
 		const ast = this.$mol_tree2_to_json(object(descr, classes)) as $mol_view_tree2_ast
 
-		Object.entries(ast).forEach(([className, root]) => {
-			Object.entries(root.properties).forEach(([name, klass]) => {
-				if (klass.type !== types.class) return
-				Object.entries(klass.properties).forEach(([n, prop]) => {
-					switch (prop.type) {
-						case types.bidi: {
-							const property = root.properties[prop.property]
-							if (property) {
-								property.writable = true
-								property.key = prop.key
-							} else
-								root.properties[prop.property] = {
-									type: 'literal',
-									raw: null,
-									hint: [klass.extends, n],
-									writable: true,
-									key: prop.key,
-								}
-							break
-						}
-						case types.put: {
-							console.log(`${name}.${n} <= ${prop.property}`)
-							const property = root.properties[prop.property]
+		Object.entries(ast).forEach(([r, root]) => {
+			Object.entries(root.properties).forEach(([p, prop]) => {
+				if (prop.type === types.list) {
+					prop.items.forEach(inner => {
+						if ('extend' in inner) {
+							if (!inner.extend) return
+							const property = root.properties[inner.extend]
 							if (!property) {
-								root.properties[prop.property] = {
+								root.properties[inner.extend] = {
 									type: 'literal',
 									raw: null,
-									hint: [klass.extends, n],
-									key: prop.key,
+									hint: prop.hint,
+									key: inner.key,
 								}
 							}
-							break
+							return
 						}
-					}
-				})
+						if (inner.type === types.put) {
+							const property = root.properties[inner.property]
+							if (!property) {
+								root.properties[inner.property] = {
+									type: 'literal',
+									raw: null,
+									hint: prop.hint,
+									key: (inner as any).key,
+								}
+							}
+						}
+					})
+				} else if (prop.type === types.class) {
+					Object.entries(prop.properties).forEach(([i, inner]) => {
+						switch (inner.type) {
+							case types.bidi: {
+								const property = root.properties[inner.property]
+								if (property) {
+									property.writable = true
+									property.key = inner.key
+								} else
+									root.properties[inner.property] = {
+										type: 'literal',
+										raw: null,
+										hint: [prop.extends, i],
+										writable: true,
+										key: inner.key || inner.parent_key,
+									}
+								break
+							}
+							case types.put: {
+								const property = root.properties[inner.property]
+								if (!property) {
+									root.properties[inner.property] = {
+										type: 'literal',
+										raw: null,
+										hint: [prop.extends, i],
+										key: inner.key,
+									}
+								}
+								break
+							}
+						}
+					})
+				}
 			})
 		})
 
@@ -245,22 +275,24 @@ namespace $ {
 
 	type PropertyName = string & { __brand: 'PropertyName' }
 	type Hint = string[]
+	type Extend = { extend: null } | { extend: PropertyName; key?: boolean }
 	type _Ast = {
 		class: {
 			extends: string
-			properties: Record<PropertyName, Property & { key?: boolean; writable?: boolean; parent_key?: boolean }>
+			properties: Record<PropertyName, Property & { key?: boolean; writable?: boolean }>
 		}
 		pull: { path: PropertyName[] }
 		put: { property: PropertyName }
-		bidi: { property: PropertyName }
+		bidi: { property: PropertyName; parent_key?: boolean }
 		literal: { raw: string | number | boolean } | { raw: null; hint?: Hint }
 		i18n: { raw: string; id: string }
-		dictionary: { properties: Array<{ self: true } | PropertyName | [string, Property]>; hint?: Hint }
-		list: { properties: Array<{ self: true } | PropertyName | Property>; hint?: Hint }
+		dictionary: { properties: Array<Extend | [string, Property]>; hint?: Hint }
+		list: { items: Array<Extend | Property>; hint?: Hint }
 	}
 	type Ast = { [K in keyof _Ast]: { type: K } & _Ast[K] }
 	export type $mol_view_tree2_ast_types = Ast
 	type Property = Ast[keyof Ast]
+	export type $mol_view_tree2_ast_property = Property
 	const types = Object.fromEntries(
 		(['class', 'pull', 'put', 'bidi', 'literal', 'i18n', 'dictionary', 'list'] satisfies (keyof Ast)[]).map(t => [
 			t,
