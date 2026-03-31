@@ -9,12 +9,12 @@ $mol_view_tree2_to_ast_demo $mol_view
 			<= Text $mol_textarea
 				style * height \100%
 				value? <=> src?
-			<= JsDoc $mol_check_box
+			<= Comments $mol_check_box
 				style *
 					justifySelf \end
 					zIndex \100
-				title \JSDoc
-				checked? <=> jsDoc? true
+				title \Comments
+				checked? <=> comments? true
 		<= ScrollJs $mol_scroll sub / <= Js $mol_text_code
 			text <= js \
 		<= ScrollCode $mol_scroll sub / <= Code $mol_text_code
