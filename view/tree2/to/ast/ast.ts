@@ -1,327 +1,330 @@
 namespace $ {
 	const err = $mol_view_tree2_error_str
-
-	const Type = (tree: $mol_tree2, type: Property['type']) => [tree.struct('type', [tree.data(type)])]
-	const Literal = (tree: $mol_tree2) => [...Type(tree, types.literal), tree.struct(`raw`, [tree])]
-	const Const = (tree: $mol_tree2, raw?: string) => [
-		...Type(tree, types.const),
-		tree.struct(`raw`, [tree.data(raw ?? tree.type)]),
-	]
-	const Null = (tree: $mol_tree2) => [
-		...Type(tree, types.literal),
-		tree.struct(`raw`, [tree]),
-		...(tree.kids.length > 0
-			? [
-					tree.struct(`hint`, [
-						array(
-							tree,
-							tree.kids.map(k => k.data(k.type)),
-						),
-					]),
-				]
-			: []),
-	]
-	const Class = (tree: $mol_tree2, parent: $mol_tree2, props: $mol_tree2[]) => [
-		...Type(tree, types.class),
-		tree.struct('extends', [parent.data(parent.type)]),
-		tree.struct('properties', [object(parent, props)]),
-	]
-	function Property(this: $, tree: $mol_tree2, other: $mol_tree2[] = []) {
-		const { name, key, next } = parts.call(this, tree)
-		return tree.struct(name, [
-			object(tree, [
-				...other,
-				...Key.call(this, tree, true),
-				...(next ? [tree.struct('writable', [tree.struct('true')])] : []),
-			]),
-		])
-	}
-
-	function parts(this: $, prop: $mol_tree2) {
-		return this.$mol_view_tree2_prop_parts(prop)
+	type Context = { chain: string[] }
+	const isKey = (key: string) => (key ? (key.length === 1 ? true : key.slice(1)) : false)
+	const Bool = (tree: $mol_tree2, value: boolean) => tree.struct(value ? 'true' : 'false')
+	const Key = (tree: $mol_tree2, key: ReturnType<typeof isKey>) =>
+		tree.struct('key', [typeof key === 'string' ? tree.data(key) : Bool(tree, key)])
+	const tree = (t: $mol_tree2) => (t instanceof BaseAst ? [t.toTree()] : [])
+	class BaseAst extends $mol_tree2 {
+		TYPE = 'todo'
+		constructor(public tree: $mol_tree2) {
+			super(tree.type, tree.value, tree.kids, tree.span)
+		}
+		toTree(...children: $mol_tree2[]) {
+			return object(this, [this.struct('type', [this.data(this.TYPE)]), ...children])
+		}
 	}
 
 	const array = (tree: $mol_tree2, items: readonly $mol_tree2[]) => tree.struct('/', items)
 	const object = (tree: $mol_tree2, items: readonly $mol_tree2[]) => tree.struct('*', items)
 
-	function Key(this: $, tree: $mol_tree2, parent: boolean) {
-		const { key } = parts.call(this, tree)
-		return key
-			? [
-					tree.struct((parent ? 'parent_' : '') + 'key', [
-						key.length === 1 ? tree.struct('true', []) : tree.data(key.slice(1)),
-					]),
-				]
-			: []
-	}
-	const Arrow = (type: (typeof types)['bidi'] | (typeof types)['put']) =>
-		function (this: $, tree: $mol_tree2, parent: $mol_tree2) {
-			const { name, key: k } = parts.call(this, tree.kids[0])
-			return [
-				...Type(tree, type),
-				tree.struct('property', [tree.data(name)]),
-				...Key.call(this, tree.kids[0], false),
-				...Key.call(this, parent, true),
-			]
+	type Str = $mol_tree2
+	type PropertyName = Str
+	type Hint = Str[]
+	class Pull extends BaseAst {
+		TYPE = 'pull'
+		private path: PropertyName[]
+		constructor(tree: $mol_tree2) {
+			super(tree)
+			this.path = []
+			let kid = tree.kids[0]
+			while (kid) {
+				let { name } = $$.$mol_view_tree2_prop_parts(kid)
+				this.path.push(kid.data(name))
+				kid = kid.kids[0]
+			}
 		}
-
-	export function $mol_view_tree2_to_ast(this: $, tree: $mol_tree2) {
-		const descr = this.$mol_view_tree2_classes(tree)
-
-		const classes = descr.kids.map(klass => {
-			const parent = this.$mol_view_tree2_child(klass)
-			const props = this.$mol_view_tree2_class_props(klass)
-			return klass.struct(klass.type, [
-				object(
-					klass,
-					Class(
-						klass,
-						parent,
-						props.map(prop => {
-							const { name } = parts.call(this, prop)
-							const extend = (tree: $mol_tree2) => {
-								if (tree.type === '^') {
-									const prop = tree.kids[0]
-									if (!prop) return object(tree, [tree.struct('extend', [tree.struct('null')])])
-									const { name } = parts.call(this, prop)
-									return object(tree, [
-										tree.struct('extend', [tree.data(name)]),
-										...Key.call(this, prop, false),
-									])
-								}
+		toTree() {
+			return super.toTree(this.struct('path', [array(this, this.path)]))
+		}
+	}
+	class ExtendSelf extends BaseAst {
+		TYPE = 'extend-self'
+	}
+	class Literal extends BaseAst {
+		toTree(...children: $mol_tree2[]) {
+			return super.toTree(this.struct('raw', [this]), ...children)
+		}
+	}
+	class NumberLiteral extends Literal {
+		TYPE = 'number'
+	}
+	class StringLiteral extends Literal {
+		TYPE = 'string'
+	}
+	class Const extends Literal {
+		TYPE = 'const'
+		constructor(tree: $mol_tree2) {
+			super(tree.data(tree.type))
+		}
+	}
+	class Extend extends BaseAst {
+		TYPE = 'extend'
+		private property: PropertyName
+		private key: ReturnType<typeof isKey>
+		constructor(tree: $mol_tree2) {
+			super(tree)
+			let { name, key } = $$.$mol_view_tree2_prop_parts(tree)
+			this.property = tree.data(name)
+			this.key = isKey(key)
+		}
+		toTree() {
+			return super.toTree(this.struct('property', [this.property]), Key(this, this.key))
+		}
+	}
+	class NullLiteral extends BaseAst {
+		TYPE = 'null'
+		private hint: Hint
+		constructor(tree: $mol_tree2) {
+			super(tree)
+			const k = this.kids[0]
+			this.hint = [k ? k.data(k.type) : this.data('')]
+		}
+		toTree() {
+			return super.toTree(this.struct('hint', [array(this, this.hint)]))
+		}
+	}
+	class Dictionary extends BaseAst {
+		TYPE = 'dictionary'
+		private properties: (ExtendSelf | Extend | [Str, Dictionary | List | Literals | Put])[]
+		private hint: Hint
+		constructor(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
+			super(tree)
+			this.hint = tree.type.length > 1 ? [this.data(tree.type.substring(1))] : []
+			this.properties = tree.kids.map(k => {
+				if (k.type === '^') {
+					const prop = k.kids[0]
+					if (!prop) return new ExtendSelf(k)
+					return new Extend(prop)
+				}
+				const h = k.hack(belt, {
+					...context,
+					chain: [...(context.chain ?? []), k.type.replace(/\?\w*$/, '')],
+				})
+				return [k, h[0] as any]
+			})
+		}
+		toTree() {
+			return super.toTree(
+				this.struct('hint', [array(this, this.hint)]),
+				this.struct('properties', [
+					array(
+						this,
+						this.properties.map(i => {
+							if (Array.isArray(i)) {
+								const [key, value] = i
+								return array(key, [key.data(key.type), ...tree(value)])
 							}
-							const val = prop.hack(
-								{
-									true: Literal,
-									false: Literal,
-									null: Null,
-									'=': v => {
-										const path = []
-										let kid = v.kids[0]
-										while (kid) {
-											let { name } = parts.call(this, kid)
-											path.push(kid.data(name))
-											kid = kid.kids[0]
-										}
-										return [...Type(v, types.pull), v.struct('path', [array(v, path)])]
-									},
-									'<=': v => Arrow(types.put).call(this, v, prop),
-									'<=>': v => Arrow(types.bidi).call(this, v, prop),
-									'@': (v, b, { chain }) => [
-										...Type(v, types.i18n),
-										v.struct(`raw`, v.kids),
-										v.struct('id', [
-											v.data(`${klass.type}_${name}${chain.length ? `_${chain}` : ''}`),
-										]),
-									],
-									'': (input, belt, context) => {
-										if (input.type[0] === '*') {
-											return [
-												...Type(input, types.dictionary),
-												input.struct('properties', [
-													array(
-														input,
-														input.kids.map(
-															k =>
-																extend(k) ??
-																array(k, [
-																	k.data(k.type),
-																	object(
-																		k,
-																		k.kids.flatMap(k =>
-																			k.hack_self(belt, {
-																				...context,
-																				chain: [
-																					...(context.chain ?? []),
-																					k.type.replace(/\?\w*$/, ''),
-																				],
-																			}),
-																		),
-																	),
-																]),
-														),
-													),
-												]),
-												...(input.type.length > 1
-													? [
-															input.struct('hint', [
-																array(input, [input.data(input.type.substring(1))]),
-															]),
-														]
-													: []),
-											]
-										}
-										if (input.type[0] === '/') {
-											return [
-												...Type(input, types.list),
-												input.struct('items', [
-													array(
-														input,
-														input.kids
-															.map(
-																k =>
-																	extend(k) ?? [
-																		object(k, k.hack_self(belt, context)),
-																	],
-															)
-															.flat(),
-													),
-												]),
-												...(input.type.length > 1
-													? [
-															input.struct('hint', [
-																array(input, [input.data(input.type.substring(1))]),
-															]),
-														]
-													: []),
-											]
-										}
-										if (input.type && /^-?\d+(\.\d+)?$/.test(input.type)) return Literal(input)
-										if ($mol_view_tree2_class_match(input)) {
-											const overrides = input.kids
-												.filter(over => {
-													if (over.type[0] === '/') return false
-													const bind = over.kids[0]
-													if (bind.type === '=>') return false
-													return true
-												})
-												.map(over =>
-													Property.call(this, over, over.hack(belt, { chain: [over.type] })),
-												)
-
-											return Class(input, input, overrides)
-										}
-										if (input.value || (!input.value && !input.type)) return Literal(input)
-										return Const(input)
-									},
-								},
-								{ chain: [] as string[] },
-							)
-
-							return Property.call(this, prop, val)
+							return i.toTree()
 						}),
 					),
-				),
-			])
-		})
-
-		const ast = object(descr, classes)
-		let json: $mol_view_tree2_ast
-		try {
-			json = this.$mol_tree2_to_json(ast) as any
-		} catch (e) {
-			throw ast
+				]),
+			)
 		}
-
-		Object.entries(json).forEach(([r, root]) => {
-			Object.entries(root.properties).forEach(([p, prop]) => {
-				if (prop.type === types.bidi) {
-					prop.writable = true
-					const property = root.properties[prop.property]
-					if (property) {
-						property.writable = true
-						property.key = prop.key
-					} else {
-						root.properties[prop.property] = {
-							type: 'literal',
-							raw: null,
-							writable: true,
-							key: prop.key || prop.parent_key,
-						}
-					}
-				} else if (prop.type === types.list) {
-					prop.items.forEach(inner => {
-						if ('extend' in inner) {
-							if (!inner.extend) return
-							const property = root.properties[inner.extend]
-							if (!property) {
-								root.properties[inner.extend] = {
-									type: 'literal',
-									raw: null,
-									hint: prop.hint,
-									key: inner.key,
-								}
-							}
-							return
-						}
-						if (inner.type === types.put) {
-							const property = root.properties[inner.property]
-							if (!property) {
-								root.properties[inner.property] = {
-									type: 'literal',
-									raw: null,
-									hint: prop.hint,
-									key: (inner as any).key,
-								}
-							}
-						}
-					})
-				} else if (prop.type === types.class) {
-					Object.entries(prop.properties).forEach(([i, inner]) => {
-						switch (inner.type) {
-							case types.bidi: {
-								const property = root.properties[inner.property]
-								if (property) {
-									property.writable = true
-									property.key = inner.key
-								} else
-									root.properties[inner.property] = {
-										type: 'literal',
-										raw: null,
-										hint: [prop.extends, i],
-										writable: true,
-										key: inner.key || inner.parent_key,
-									}
-								break
-							}
-							case types.put: {
-								const property = root.properties[inner.property]
-								if (!property) {
-									root.properties[inner.property] = {
-										type: 'literal',
-										raw: null,
-										hint: [prop.extends, i],
-										key: inner.key,
-										parent_key: inner.parent_key,
-									}
-								}
-								break
-							}
-						}
-					})
+	}
+	class List extends BaseAst {
+		TYPE = 'list'
+		private items: (ExtendSelf | Extend | Dictionary | List | Literals | Put)[]
+		private hint: Hint
+		constructor(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
+			super(tree)
+			this.hint = tree.type.length > 1 ? [this.data(tree.type.substring(1))] : []
+			this.items = tree.kids.map(k => {
+				if (k.type === '^') {
+					const prop = k.kids[0]
+					if (!prop) return new ExtendSelf(k)
+					return new Extend(prop)
 				}
+				const h = k.hack_self(belt, {
+					...context,
+					chain: [...(context.chain ?? []), k.type.replace(/\?\w*$/, '')],
+				})
+				return h[0] as any
 			})
-		})
-		return json
-	}
-
-	type PropertyName = string & { __brand: 'PropertyName' }
-	type Hint = string[]
-	type Key = { key?: boolean | string }
-	type Extend = { extend: null } | ({ extend: PropertyName } & Key)
-	type _Ast = {
-		class: {
-			extends: string
-			properties: Record<PropertyName, Property & { writable?: boolean } & Key>
 		}
-		pull: { path: PropertyName[] }
-		put: { property: PropertyName }
-		bidi: { property: PropertyName; parent_key?: boolean }
-		literal: { raw: string | number | boolean } | { raw: null; hint?: Hint }
-		const: { raw: string | number | boolean }
-		i18n: { raw: string; id: string }
-		dictionary: { properties: Array<Extend | [string, Property]>; hint?: Hint }
-		list: { items: Array<Extend | Property>; hint?: Hint }
+		toTree() {
+			return super.toTree(
+				this.struct('hint', [array(this, this.hint)]),
+				this.struct('items', [array(this, this.items.flatMap(tree))]),
+			)
+		}
 	}
-	type Ast = { [K in keyof _Ast]: { type: K } & _Ast[K] }
-	export type $mol_view_tree2_ast_types = Ast
-	type Property = Ast[keyof Ast]
-	export type $mol_view_tree2_ast_property = Property
-	const types = Object.fromEntries(
-		(
-			['class', 'pull', 'put', 'bidi', 'literal', 'i18n', 'dictionary', 'list', 'const'] satisfies (keyof Ast)[]
-		).map(t => [t, t]),
-	) as { [k in keyof Ast]: k }
 
-	export type $mol_view_tree2_ast = Record<string, Ast['class']>
+	class Arrow extends BaseAst {
+		private property: PropertyName
+		private key: ReturnType<typeof isKey>
+		constructor(tree: $mol_tree2) {
+			super(tree)
+			const { name, key: key } = $$.$mol_view_tree2_prop_parts(tree.kids[0])
+			this.property = tree.data(name)
+			this.key = isKey(key)
+		}
+		toTree() {
+			return super.toTree(Key(this, this.key), this.struct('property', [this.property]))
+		}
+	}
+	class Ast extends BaseAst {
+		private classes: Class[]
+		constructor(tree: $mol_tree2) {
+			super($$.$mol_view_tree2_classes(tree))
+			this.classes = this.kids.map(klass => new Class(klass))
+		}
+		toTree() {
+			return object(this, [this.struct('classes', [array(this, this.classes.flatMap(tree))])])
+		}
+	}
+	class Put extends Arrow {
+		TYPE = 'put'
+	}
+	class Bidi extends Arrow {
+		TYPE = 'bidi'
+	}
+	class StringTranslated extends Literal {
+		TYPE = 'string-translated'
+		private id: Str
+		constructor(tree: $mol_tree2, klass: string, prop: string, { chain }: Context) {
+			super(tree.kids[0])
+			this.id = this.data(`${klass}_${prop}${chain.length ? `_${chain}` : ''}`)
+		}
+		toTree() {
+			return super.toTree(this.struct('id', [this.id]))
+		}
+	}
+	type Literals = NullLiteral | StringLiteral | StringTranslated | Const
+
+	class InnerClass extends BaseAst {
+		TYPE = 'class'
+		private extends_: Str
+		private properties: Map<
+			PropertyName,
+			{
+				key?: $mol_tree2
+				value: Put | Pull | Bidi | Dictionary | List | InnerClass | Literals
+				writable?: $mol_tree2
+			}
+		>
+
+		constructor(tree: $mol_tree2, belt: $mol_tree2_belt<Context>) {
+			super(tree)
+			this.extends_ = this
+			this.properties = new Map(
+				tree.kids
+					.filter(over => {
+						if (over.type[0] === '/') return false
+						const bind = over.kids[0]
+						if (bind.type === '=>') return false
+						return true
+					})
+					.map(prop => {
+						const { name, key, next } = $$.$mol_view_tree2_prop_parts(prop)
+						return [
+							prop.data(name),
+							{
+								key: key ? prop : undefined,
+								value: prop.hack(belt, { chain: [prop.type] })[0] as any,
+								writable: next ? prop : undefined,
+							},
+						]
+					}),
+			)
+		}
+
+		toTree() {
+			return super.toTree(
+				this.struct('extends', [this.extends_.data(this.extends_.type)]),
+				this.struct('properties', [
+					object(
+						this,
+						Array.from(this.properties).map(([k, { key, value, writable }]) =>
+							k.struct(k.value, [
+								object(k, [
+									Key(k, !!key),
+									k.struct('writable', [Bool(k, !!writable)]),
+									k.struct('value', tree(value)),
+								]),
+							]),
+						),
+					),
+				]),
+			)
+		}
+	}
+	class Class extends BaseAst {
+		TYPE = 'class'
+		private extends_: Str
+		private properties: Map<
+			PropertyName,
+			{
+				key?: $mol_tree2
+				value: Put | Put | Bidi | Dictionary | List | InnerClass | Literals
+				writable?: $mol_tree2
+			}
+		>
+		constructor(tree: $mol_tree2) {
+			super(tree)
+			this.extends_ = $$.$mol_view_tree2_child(tree)
+			this.properties = new Map(
+				$$.$mol_view_tree2_class_props(tree).map(prop => {
+					const { name, key, next } = $$.$mol_view_tree2_prop_parts(prop)
+					const val = prop.hack(
+						{
+							'=': v => [new Pull(v)],
+							'=>': v => [new Pull(v)],
+							'<=': v => [new Put(v)],
+							'<=>': v => [new Bidi(v)],
+							null: v => [new NullLiteral(v)],
+							'@': (v, b, c) => [new StringTranslated(v, this.name, name, c)],
+							'': (input, belt, context) => {
+								if (input.type[0] === '*') return [new Dictionary(input, belt, context)]
+								if (input.type[0] === '/') return [new List(input, belt, context)]
+								if (input.value || (!input.value && !input.type)) return [new StringLiteral(input)]
+								if (input.type && /^-?\d+(\.\d+)?$/.test(input.type)) return [new NumberLiteral(input)]
+								if ($mol_view_tree2_class_match(input)) return [new InnerClass(input, belt)]
+								return [new Const(input)]
+							},
+						},
+						{ chain: [] } as Context,
+					)
+					return [
+						prop.data(name),
+						{
+							key: key ? prop : undefined,
+							value: val[0] as any,
+							writable: next ? prop : undefined,
+						},
+					]
+				}),
+			)
+		}
+		get name() {
+			return this.tree.type
+		}
+		toTree() {
+			return super.toTree(
+				this.struct('name', [this.data(this.name)]),
+				this.struct('extends', [this.extends_.data(this.extends_.type)]),
+				this.struct('properties', [
+					object(
+						this,
+						Array.from(this.properties).map(([k, { key, value, writable }]) =>
+							k.struct(k.value, [
+								object(k, [
+									Key(k, !!key),
+									k.struct('writable', [Bool(k, !!writable)]),
+									k.struct('value', tree(value)),
+								]),
+							]),
+						),
+					),
+				]),
+			)
+		}
+	}
+
+	export function $mol_view_tree2_to_ast(this: $, tree: $mol_tree2) {
+		return new Ast(tree)
+	}
+
+	export type $mol_view_tree2_ast = ReturnType<typeof $mol_view_tree2_to_ast>
 }
