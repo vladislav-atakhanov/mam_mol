@@ -4,11 +4,11 @@
 
 ## Schema API
 
-- `toString()` - identity of schema.
-- `check(val)` - type guard.
-- `guard(val)` - strict parser.
-- `cast(val)` - relaxed caster.
-- `default` - default value for casting.
+- `.toString()` - identity of schema.
+- `.check(val)` - type guard.
+- `.guard(val)` - strict parser.
+- `.cast(val)` - relaxed caster.
+- `.default` - default value for casting.
 
 ## Leaf schemas
 
@@ -78,4 +78,19 @@ if( $my_user_main.check( user ) ) {
 
 ```ts
 const article = $my_article_full.default // default article state
+```
+
+## Usage from NPM
+
+```ts
+import {
+	$mol_schema_record: Rec,
+	$mol_schema_string: Str,
+	/// ...
+} from 'mol_schema'
+
+export class Article extends Rec({
+	title: Str,
+	body: Str,
+}) {}
 ```
