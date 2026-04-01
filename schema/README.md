@@ -23,7 +23,7 @@
     - `$mol_schema_natural` - natural number from 0 (default).
   - `$mol_schema_negative` - value <= 0
 
-## Coposition schemas
+## Composition schemas
 
 - `$mol_schema_some(...variants)` - some of schemas (default of first as default).
   - `$mol_schema_maybe(schema)` - value or null or undefined (undefined as default).
