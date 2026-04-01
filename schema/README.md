@@ -15,7 +15,7 @@
 - `$mol_schema_enum(...options)` - some of constant values (first value as default).
 - `$mol_schema_boolean` - true or false (default).
 - `$mol_schema_string` - any string ("" as default).
-  - `$mol_schema_pattern(...regexp)` - string that matched to regexp ("" as default).
+  - `$mol_schema_pattern(regexp)` - string that matched to regexp ("" as default).
 - `$mol_schema_float` - any number (NaN as default).
 - `$mol_schema_integer` - integer number (0 as default).
 - `$mol_schema_range(min,max)` - range of values between min (default) and max.
