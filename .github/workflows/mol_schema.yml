@@ -30,4 +30,4 @@ jobs:
       if: ${{ github.ref == 'refs/heads/master' }}
       with:
         token: ${{ secrets.NPM_AUTH_TOKEN }}
-        package: ./schema/schema/-/package.json
+        package: ./mol/schema/schema/-/package.json
