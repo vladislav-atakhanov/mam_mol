@@ -20,7 +20,7 @@ namespace $.$$ {
 		}
 		@$mol_mem
 		tree() {
-			return this.ast().toTree()
+			return this.ast().json()
 		}
 		@$mol_mem
 		ast_text() {
