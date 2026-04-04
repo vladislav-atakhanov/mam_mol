@@ -121,12 +121,9 @@ namespace $ {
 	}
 	class Dictionary extends BaseAst {
 		TYPE = 'dictionary'
-		properties: (ExtendSelf | Extend | [Str, Dictionary | List | Literals | Put])[]
-		hint: Hint
-		constructor(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
-			super(tree)
-			this.hint = tree.type.length > 1 ? [new PropertyName(this, tree.type.substring(1))] : []
-			this.properties = tree.kids.map(k => {
+		static from_tree2(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
+			const hint = tree.type.length > 1 ? [new PropertyName(tree, tree.type.substring(1))] : []
+			const properties = tree.kids.map(k => {
 				if (k.type === '^') {
 					const prop = k.kids[0]
 					if (!prop) return new ExtendSelf(k)
@@ -136,8 +133,20 @@ namespace $ {
 					...context,
 					chain: [...(context.chain ?? []), k.type.replace(/\?\w*$/, '')],
 				})
-				return [new Str(k, k.type), h[0] as any] as const
+				// Complex type because Array.isArray does not properly narrow tuple types
+				return [new Str(k, k.type), h[0] as any] satisfies Extract<
+					ConstructorParameters<typeof Dictionary>[1][number],
+					readonly any[]
+				>
 			})
+			return new Dictionary(tree, properties, hint)
+		}
+		constructor(
+			tree: $mol_tree2,
+			public properties: (ExtendSelf | Extend | [Str, Dictionary | List | Literals | Put])[],
+			public hint: Hint,
+		) {
+			super(tree)
 		}
 		json() {
 			return super.json(
@@ -159,12 +168,9 @@ namespace $ {
 	}
 	class List extends BaseAst {
 		TYPE = 'list'
-		items: (ExtendSelf | Extend | Dictionary | List | Literals | Put)[]
-		hint: Hint
-		constructor(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
-			super(tree)
-			this.hint = tree.type.length > 1 ? [new PropertyName(this, tree.type.substring(1))] : []
-			this.items = tree.kids.map(k => {
+		static from_tree2(tree: $mol_tree2, belt: $mol_tree2_belt<Context>, context: Context) {
+			const hint = tree.type.length > 1 ? [new PropertyName(tree, tree.type.substring(1))] : []
+			const items = tree.kids.map(k => {
 				if (k.type === '^') {
 					const prop = k.kids[0]
 					if (!prop) return new ExtendSelf(k)
@@ -176,6 +182,14 @@ namespace $ {
 				})
 				return h[0] as any
 			})
+			return new List(tree, items, hint)
+		}
+		constructor(
+			tree: $mol_tree2,
+			public items: (ExtendSelf | Extend | Dictionary | List | Literals | Put)[],
+			public hint: Hint,
+		) {
+			super(tree)
 		}
 		json() {
 			return super.json(
@@ -281,6 +295,9 @@ namespace $ {
 		get({ value }: PropertyName) {
 			return this.innerMap.get(value)?.[1]
 		}
+		has({ value }: PropertyName) {
+			return this.innerMap.has(value)
+		}
 		set(name: PropertyName, value: Val<V>) {
 			return this.innerMap.set(name.value, [name, value])
 		}
@@ -313,8 +330,8 @@ namespace $ {
 							null: v => [new NullLiteral(v)],
 							'@': (v, b, c) => [new StringTranslated(v, this.name, name, c)],
 							'': (input, belt, context) => {
-								if (input.type[0] === '*') return [new Dictionary(input, belt, context)]
-								if (input.type[0] === '/') return [new List(input, belt, context)]
+								if (input.type[0] === '*') return [Dictionary.from_tree2(input, belt, context)]
+								if (input.type[0] === '/') return [List.from_tree2(input, belt, context)]
 								if (input.value || (!input.value && !input.type)) return [new StringLiteral(input)]
 								if (input.type && /^-?\d+(\.\d+)?$/.test(input.type)) return [new NumberLiteral(input)]
 								if ($mol_view_tree2_class_match(input)) return [new InnerClass(input, belt)]
@@ -338,7 +355,7 @@ namespace $ {
 		get name() {
 			return this.tree.type
 		}
-		prepare(ast: BaseAst, ctx: { hint?: Hint } = {}) {
+		prepare(ast: BaseAst, ctx: { hint?: Hint; parent?: BaseAst } = {}) {
 			if (ast instanceof Bidi) {
 				const p = this.properties.get(ast.property)
 				if (p) {
@@ -352,19 +369,31 @@ namespace $ {
 					})
 				}
 			} else if (ast instanceof List) {
-				ast.items.forEach(i => this.prepare(i, { ...ctx, hint: ast.hint }))
+				ast.items.forEach(i => this.prepare(i, { ...ctx, hint: ast.hint, parent: ast }))
 			} else if (ast instanceof Extend) {
-				const p = this.properties.get(ast.property)
-				if (!p) {
-					this.properties.set(ast.property, {
-						key: ast.key.bool(),
-						value: new NullLiteral(ast, ctx.hint),
-						writable: new Bool(ast, false),
-					})
+				if (!this.properties.has(ast.property)) {
+					if (ctx.parent instanceof List) {
+						this.properties.set(ast.property, {
+							key: ast.key.bool(),
+							value: new List(ast, [], ctx.hint ?? []),
+							writable: new Bool(ast, false),
+						})
+					} else if (ctx.parent instanceof Dictionary) {
+						this.properties.set(ast.property, {
+							key: ast.key.bool(),
+							value: new Dictionary(ast, [], ctx.hint ?? []),
+							writable: new Bool(ast, false),
+						})
+					} else {
+						this.properties.set(ast.property, {
+							key: ast.key.bool(),
+							value: new NullLiteral(ast, ctx.hint),
+							writable: new Bool(ast, false),
+						})
+					}
 				}
 			} else if (ast instanceof Put) {
-				const p = this.properties.get(ast.property)
-				if (!p) {
+				if (!this.properties.has(ast.property)) {
 					this.properties.set(ast.property, {
 						key: ast.key.bool(),
 						value: new NullLiteral(ast, ctx.hint),
@@ -374,9 +403,9 @@ namespace $ {
 			} else if (ast instanceof Dictionary) {
 				ast.properties.forEach(i => {
 					if (Array.isArray(i)) {
-						this.prepare(i[1], { ...ctx, hint: ast.hint })
+						this.prepare(i[1], { ...ctx, hint: ast.hint, parent: ast })
 					} else {
-						this.prepare(i, { ...ctx, hint: ast.hint })
+						this.prepare(i, { ...ctx, hint: ast.hint, parent: ast })
 					}
 				})
 			} else if (ast instanceof Class) {
