@@ -199,16 +199,6 @@ namespace $ {
 			return super.json(this.struct('key', json(this.key)), this.struct('property', json(this.property)))
 		}
 	}
-	class Ast extends BaseAst {
-		classes: Class[]
-		constructor(tree: $mol_tree2) {
-			super($$.$mol_view_tree2_classes(tree))
-			this.classes = this.kids.map(klass => new Class(klass))
-		}
-		json() {
-			return object(this, [this.struct('classes', [array(this, this.classes.flatMap(json))])])
-		}
-	}
 	class Put extends Arrow {
 		TYPE = 'put'
 	}
@@ -418,9 +408,24 @@ namespace $ {
 		}
 	}
 
-	export function $mol_view_tree2_to_ast(this: $, tree: $mol_tree2) {
-		return new Ast(tree)
+	export class $mol_view_tree2_to_ast extends BaseAst {
+		classes: Class[]
+		constructor(tree: $mol_tree2) {
+			super($$.$mol_view_tree2_classes(tree))
+			this.classes = this.kids.map(klass => new Class(klass))
+		}
+		json() {
+			return object(this, [this.struct('classes', [array(this, this.classes.flatMap(json))])])
+		}
+		static Class = Class
+		static Pull = Pull
+		static Put = Put
+		static InnerClass = InnerClass
+		static Bidi = Bidi
+		static StringTranslated = StringTranslated
+		static Const = Const
+		static String = StringLiteral
+		static Number = NumberLiteral
+		static Null = NullLiteral
 	}
-
-	export type $mol_view_tree2_ast = ReturnType<typeof $mol_view_tree2_to_ast>
 }

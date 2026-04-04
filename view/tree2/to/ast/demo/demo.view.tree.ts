@@ -15,7 +15,7 @@ namespace $.$$ {
 		@$mol_mem
 		ast() {
 			const tree = this.$.$mol_tree2_from_string(this.value())
-			const ast = this.$.$mol_view_tree2_to_ast(tree)
+			const ast = new this.$.$mol_view_tree2_to_ast(tree)
 			return ast
 		}
 		@$mol_mem
