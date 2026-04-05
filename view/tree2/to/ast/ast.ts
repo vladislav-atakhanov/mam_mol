@@ -359,7 +359,7 @@ namespace $ {
 			if (ast instanceof Bidi) {
 				const p = this.properties.get(ast.property)
 				if (p) {
-					p.key = p.key
+					p.key = ast.key.bool()
 					p.writable = new Bool(ast, true)
 				} else {
 					this.properties.set(ast.property, {
@@ -408,10 +408,14 @@ namespace $ {
 						this.prepare(i, { ...ctx, hint: ast.hint, parent: ast })
 					}
 				})
-			} else if (ast instanceof Class) {
-				ast.properties.forEach(prop => this.prepare(prop.value))
-			} else if (ast instanceof InnerClass) {
-				ast.properties.forEach((prop, name) => this.prepare(prop.value, { ...ctx, hint: [ast.extends_, name] }))
+			} else if (ast instanceof Class || ast instanceof InnerClass) {
+				ast.properties.forEach((prop, name) => {
+					this.prepare(
+						prop.value,
+						ast instanceof InnerClass ? { hint: [(ast as InnerClass).extends_, name] } : {},
+					)
+					if (prop.value instanceof Bidi) prop.writable = new Bool(prop.value, true)
+				})
 			}
 		}
 
