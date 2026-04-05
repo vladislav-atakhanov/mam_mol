@@ -134,7 +134,7 @@ namespace $ {
 					chain: [...(context.chain ?? []), k.type.replace(/\?\w*$/, '')],
 				})
 				// Complex type because Array.isArray does not properly narrow tuple types
-				return [new Str(k, k.type), h[0] as any] satisfies Extract<
+				return [new Str(k, k.type || k.value), h[0] as any] satisfies Extract<
 					ConstructorParameters<typeof Dictionary>[1][number],
 					readonly any[]
 				>
