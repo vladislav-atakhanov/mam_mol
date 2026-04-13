@@ -313,12 +313,6 @@ namespace $ {
 			if( res.errors.length ) throw res.errors
 			return res.options
 		}
-		
-		@ $mol_mem_key
-		tsSource( { path , target } : { path : string , target : number } ) {
-			const content = $mol_file.absolute( path ).text()
-			return $node.typescript.createSourceFile( path , content , target )
-		}
 
 		@ $mol_mem_key
 		tsPaths( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
@@ -338,33 +332,6 @@ namespace $ {
 			}
 
 			return sources.map( src => src.path() )
-		}
-
-		@ $mol_mem_key
-		tsHost( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			
-			const host = $node.typescript.createCompilerHost( this.tsOptions() )
-			
-			host.fileExists = ( path )=> $mol_file.relative( path ).exists()
-			host.readFile = ( path )=> $mol_file.relative( path ).text()
-			host.writeFile = ( path , text )=> $mol_file.relative( path ).text( text, 'virt' )
-			
-			return host
-		}
-
-		@ $mol_mem_key
-		tsTranspiler( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			return $node.typescript.createProgram(
-				this.tsPaths({ path , exclude , bundle }) ,
-				this.tsOptions() ,
-				this.tsHost({ path , exclude , bundle }) ,
-			)
-		}
-
-		@ $mol_mem_key
-		tsTranspile( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			const res = this.tsTranspiler({ path , exclude , bundle }).emit()
-			return res
 		}
 
 		@ $mol_mem_key
