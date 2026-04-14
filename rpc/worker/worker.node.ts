@@ -42,11 +42,12 @@ namespace $ {
 			return $mol_wire_sync(this).worker_inited()
 		}
 
-		override remote_call<Key extends keyof Remote_handlers>(name : Key , arg : Parameters<Remote_handlers[Key]>[0]) {
-			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Key]>>()
+		@ $mol_action
+		override remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
+			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
 			const sender = channel.sender()
 
-			this.target().postMessage([ name, arg, sender ], [ sender as any ])
+			this.target().postMessage([ method, arg, sender ], [ sender as any ])
 
 			return channel
 		}

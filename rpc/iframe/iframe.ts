@@ -9,9 +9,10 @@ namespace $ {
 			return this.$.$mol_dom_context.parent
 		}
 
-		override remote_call<Key extends keyof Remote_handlers>(name : Key , arg : Parameters<Remote_handlers[Key]>[0]) {
-			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Key]>>()
-			this.target().postMessage([ name, arg ], '*', [ channel.sender() ])
+		@ $mol_action
+		override remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
+			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
+			this.target().postMessage([ method, arg ], '*', [ channel.sender() ])
 
 			return channel
 		}

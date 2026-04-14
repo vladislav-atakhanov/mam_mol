@@ -7,8 +7,9 @@ namespace $ {
 		Handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
 	> extends $mol_object {
 
+		@ $mol_action
 		remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
-			return new $mol_rpc_channel()
+			return new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
 		}
 
 		handlers() {
