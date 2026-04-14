@@ -72,7 +72,11 @@ namespace $ {
 
 			target.on('message', cb)
 
-			return { destructor: () => target.off('message', cb) }
+			return { destructor: () => {
+				target.off('message', cb)
+				// terminate worker if target is worker
+				;(target as any)[Symbol.asyncDispose]?.()
+			} }
 		}
 	}
 }
