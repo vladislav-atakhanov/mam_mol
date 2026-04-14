@@ -374,26 +374,14 @@ namespace $ {
 
 			this.$.$mol_log3_rise({
 				place: `${this}`,
-				message: `$mol_build_obsolete schedule`,
+				message: `$mol_build_obsolete`,
 				path
 			})
 				
-			this.notify_send_debounced(line)
+			line.send( '$mol_build_obsolete' )
 
 			return true
 
-		}
-
-		protected notify_send_debounced = $mol_wire_async((params: InstanceType<$node['ws']['WebSocket']>) => this.notify_send(params))
-
-		protected notify_send( line: InstanceType<$node['ws']['WebSocket']> ) {
-			this.$.$mol_wait_timeout(120)
-			this.$.$mol_log3_rise({
-				place: `${this}`,
-				message: `$mol_build_obsolete send`,
-			})
-				
-			line.send( '$mol_build_obsolete' )
 		}
 		
 		@ $mol_mem
