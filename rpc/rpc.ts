@@ -2,9 +2,12 @@ namespace $ {
 
 	export type $mol_rpc_handlers = Record<string, (arg: unknown) => unknown>
 
-	export class $mol_rpc<Handlers extends $mol_rpc_handlers = $mol_rpc_handlers> extends $mol_object {
+	export class $mol_rpc<
+		Remote_handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
+		Handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
+	> extends $mol_object {
 
-		remote_call<Method extends keyof Handlers>(method : Method , arg : Parameters<Handlers[Method]>[0]) {
+		remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
 			return new $mol_rpc_channel()
 		}
 
@@ -31,12 +34,17 @@ namespace $ {
 
 		@ $mol_mem
 		remote() {
-			return new Proxy( {} as Handlers , {
+			return new Proxy( {} as Remote_handlers , {
 				get : ( target : any , name : string )=> {
 					if (name === 'destructor') return () => {}
 					return ( ... args : readonly unknown[] )=> this.remote_call(name, args as any).result()
 				}
 			} )
+		}
+
+		@ $mol_mem
+		listener() {
+			return { destructor: () => {} }
 		}
 
 	}
