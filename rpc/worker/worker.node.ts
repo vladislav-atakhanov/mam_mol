@@ -10,9 +10,36 @@ namespace $ {
 
 		uri() { return '' }
 
+		worker() {
+			const threads = this.threads()
+			return new threads.Worker(this.uri())
+		}
+
+		worker_inited() {
+			const worker = this.worker()
+
+			return new Promise<typeof worker>((done, fail) => {
+				worker.once('error', e => {
+
+					const error = typeof e !== 'object' || ! e
+						? 'Unknown'
+						: 'error' in e && e.error instanceof Error
+							? e.error
+							: new $mol_error_mix(('message' in e ? String(e.message) : null) || 'Unknown error', e)
+
+					fail(error)
+				})
+				worker.once('online', () => done(worker))
+				worker.once('exit', code => fail(new Error('Worker exited', { cause: { code } })))
+			})
+		}
+
 		@ $mol_mem
 		target() {
-			return this.threads().parentPort ?? new Worker( this.uri() )
+			const parent = this.threads().parentPort
+			if ( parent ) return parent
+
+			return $mol_wire_sync(this).worker_inited()
 		}
 
 		override remote_call<Key extends keyof Remote_handlers>(name : Key , arg : Parameters<Remote_handlers[Key]>[0]) {
@@ -43,9 +70,9 @@ namespace $ {
 			const target = this.target()
 			const cb = $mol_wire_async((e: Event) => this.event_receive(e))
 
-			target.addEventListener('message', cb)
+			target.on('message', cb)
 
-			return { destructor: () => target.removeEventListener('message', cb) }
+			return { destructor: () => target.off('message', cb) }
 		}
 	}
 }
