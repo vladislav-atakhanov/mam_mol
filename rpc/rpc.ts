@@ -34,6 +34,9 @@ namespace $ {
 
 		@ $mol_mem
 		remote() {
+			// Keep listener if remote pulled
+			this.listener()
+
 			return new Proxy( {} as Remote_handlers , {
 				get : ( target : any , name : string )=> {
 					if (name === 'destructor') return () => {}
@@ -43,7 +46,7 @@ namespace $ {
 		}
 
 		@ $mol_mem
-		listener() {
+		protected listener() {
 			return { destructor: () => {} }
 		}
 

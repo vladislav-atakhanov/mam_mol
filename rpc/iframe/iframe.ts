@@ -31,7 +31,7 @@ namespace $ {
 		}
 
 		@ $mol_mem
-		override listener() {
+		protected override listener() {
 			const target = this.target()
 			const cb = $mol_wire_async((e: MessageEvent) => this.event_receive(e))
 
