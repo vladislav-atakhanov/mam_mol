@@ -3,3 +3,6 @@ $mol_frame_rpc $mol_frame
 		frame_window <= window
 		remote => remote
 		handlers <= handlers *
+	auto /
+		^
+		<= remote
