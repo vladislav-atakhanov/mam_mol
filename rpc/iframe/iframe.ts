@@ -4,28 +4,13 @@ namespace $ {
 		Handlers extends $mol_rpc_handlers = $mol_rpc_handlers
 	> extends $mol_rpc<Remote_handlers, Handlers> {
 
+		frame_window() {
+			return this.$.$mol_dom_context.window
+		}
+
 		target() {
 			// for main window - bind window to iframe contentWindow
-			return this.$.$mol_dom_context.parent ?? this.frame().window()
-		}
-
-		uri() { return '' }
-
-		@ $mol_mem
-		frame_raw() {
-			return this.$.$mol_frame.make({
-				uri: () => this.uri(),
-				style: () => ({ display: 'none' }),
-			})
-		}
-
-		@ $mol_mem
-		frame() {
-			const frame = this.frame_raw()
-
-			this.$.$mol_dom_context.document.appendChild(frame.dom_node())
-
-			return frame
+			return this.$.$mol_dom_context.parent ?? this.frame_window()
 		}
 
 		@ $mol_action
