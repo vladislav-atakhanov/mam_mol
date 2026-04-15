@@ -47,7 +47,7 @@ namespace $ {
 			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
 			const sender = channel.sender()
 
-			this.target().postMessage([ method, arg, sender ], [ sender as any ])
+			this.target().postMessage([ method, arg, sender ], [ sender as any x])
 
 			return channel
 		}
