@@ -32,9 +32,9 @@ namespace $ {
 			}
 
 			this.$.$mol_log3_rise({
-				place: `${this}.handle`,
-				message: 'handled',
-				method: name,
+				place: `${this}.handle()`,
+				message: name,
+				result,
 				error,
 			})
 

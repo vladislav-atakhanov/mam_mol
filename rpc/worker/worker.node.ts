@@ -68,7 +68,7 @@ namespace $ {
 			if ( ! parent ) {
 				const worker = $mol_wire_sync(this).worker()
 				this.$.$mol_log3_rise({
-					place: `${this}.target`,
+					place: `${this}.target()`,
 					message: 'started',
 				})
 
@@ -83,8 +83,8 @@ namespace $ {
 			const destructor = () => { parent.off('message', cb) }
 
 			this.$.$mol_log3_rise({
-				place: `${this}.target`,
-				message: 'attached',
+				place: `${this}.target()`,
+				message: 'started',
 			})
 
 			return { host: parent, destructor }
@@ -96,9 +96,10 @@ namespace $ {
 			const sender = channel.sender()
 
 			this.$.$mol_log3_rise({
-				place: `${this}.send`,
-				message: 'sended',
+				place: `${this}.channel()`,
+				message: method,
 				method,
+				args,
 			})
 
 			this.target().host?.postMessage([ method, args, sender ], [ sender as any ])
