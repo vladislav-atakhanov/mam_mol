@@ -1,4 +1,14 @@
 namespace $ {
+	export type $mol_rpc_channel_data = {
+		result?: unknown
+		error?: {
+			message: string
+			name: string
+			args?: readonly unknown[]
+			cause?: unknown
+		}
+	}
+
 	export class $mol_rpc_channel<Result = unknown> extends $mol_object {
 		readonly native = new MessageChannel()
 

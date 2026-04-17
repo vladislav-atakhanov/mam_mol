@@ -1,54 +1,67 @@
 namespace $ {
 
-	export type $mol_rpc_handlers = Record<string, (arg: unknown) => unknown>
+	export type $mol_rpc_handlers = Record<string, Function>
+
+	export type $mol_rpc_methods<Obj extends {}> = {
+		[Key in keyof Obj]: Obj[Key] extends Function ? Obj[Key] : never
+	}
+
+	type Payload = [name : string , args : readonly unknown[], sender: MessagePort]
 
 	export class $mol_rpc<
 		Remote_handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
-		Handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
 	> extends $mol_object {
 
-		@ $mol_action
-		remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
-			return new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
-		}
-
 		handlers() {
-			return {} as Handlers
+			return {} as Record<string, Function>
 		}
 
-		response<Method extends keyof Handlers>(method : Method , arg : Parameters<Handlers[Method]>[0]) {
-			let error, result
+		handle_async(payload: Payload) {
+			return $mol_wire_async(this).handle(payload)
+		}
+
+		handle([ name, args, sender ]: Payload) {
+			let result, error
 
 			try {
-				const handlers = this.handlers()
-				result = handlers[method](arg)
+				result = this.handlers()[name](...args)
 			} catch (e) {
-				if ($mol_promise_like(e) ) $mol_fail_hidden(e)
-
-				const enriched = new $mol_error_mix((e as Error).message, { orig: e, method, arg }, e as Error)
-				$mol_fail_log(enriched)
-				error = { method, arg, message: enriched.message, cause: enriched.cause }
+				if ($mol_promise_like(e)) $mol_fail_hidden(e)
+				this.$.$mol_fail_log(e)
+				error = { message: (e as Error).message, name, args, cause: (e as Error).cause }
 			}
 
-			return { error, result }
+			this.$.$mol_log3_rise({
+				place: `${this}.handle`,
+				message: 'handled',
+				method: name,
+				error,
+			})
+
+			sender.postMessage({ result , error })
+		}
+
+		@ $mol_action
+		channel(method : string , args : readonly unknown[]) {
+			return new $mol_rpc_channel()
 		}
 
 		@ $mol_mem
 		remote() {
-			// Keep listener if remote pulled
-			this.listener()
-
-			return new Proxy( {} as Remote_handlers , {
-				get : ( target : any , name : string )=> {
-					if (name === 'destructor') return () => {}
-					return ( ... args : readonly unknown[] )=> this.remote_call(name, args as any).result()
-				}
-			} )
+			return new Proxy( {} , {
+				get : ( target : any , name : string ) =>
+					( ... args : readonly unknown[] ) => name === 'destructor'
+						? null
+						: this.channel(name, args).result()
+			} ) as Remote_handlers
 		}
 
+		protected target() {}
+
 		@ $mol_mem
-		protected listener() {
-			return { destructor: () => {} }
+		status() {
+			this.target()
+			return null
 		}
 
 	}

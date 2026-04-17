@@ -1,0 +1,166 @@
+namespace $ {
+
+	export type $mol_build_checker_remote = {
+		paths(): readonly string[]
+		root(): string
+		options(): ReturnType<typeof $node.typescript.getDefaultCompilerOptions>
+		error(filename: string, error: string): void
+		write(rec: readonly ([ path: string, data: string ])[]): void
+	}
+
+	export class $mol_build_checker extends $mol_object {
+		@ $mol_mem
+		paths(next?: readonly string[]): readonly string[] {
+			return next ?? this.remote().paths() ?? []
+		}
+
+		@ $mol_mem
+		root(next?: string): string {
+			return next ?? this.remote().root() ?? ''
+		}
+
+		@ $mol_mem
+		options(next?: ReturnType<typeof $node.typescript.getDefaultCompilerOptions>): ReturnType<typeof $node.typescript.getDefaultCompilerOptions> {
+			return next ?? this.remote().options() ?? $node.typescript.getDefaultCompilerOptions()
+		}
+
+		protected error_flush_series = Promise.resolve(null)
+		error(filename: string, error: string) {
+			this.error_flush_series = this.error_flush_series
+				.finally($mol_wire_async(() => this.remote().error(filename, error)))
+		}
+
+		protected writes = [] as [path: string, data: string][]
+		protected write_flush_series = Promise.resolve(null)
+
+		protected write_flush() {
+			const writes = this.writes
+
+			this.write_flush_series = this.write_flush_series
+				.finally($mol_wire_async(() => this.remote().write(writes)))
+
+			this.writes = []
+		}
+
+		protected timeout = null as null | $mol_after_timeout
+		write_add(path: string, data: string) {
+			this.writes.push([ path, data ])
+			this.timeout?.destructor()
+			this.timeout = new $mol_after_timeout(300, () => this.write_flush())
+		}
+
+		@ $mol_mem
+		protected rpc() {
+			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<$mol_build_checker_remote>>({
+				handlers: () => this as $mol_rpc_methods<this>,
+			})
+		}
+
+		protected remote() { return this.rpc().remote() }
+
+		start() {
+			this.rpc().status()
+			this.host()
+		}
+
+		protected run() {}
+
+		protected versions = {} as Record<string, number>
+		protected watchers = new Map< string , ( path : string , kind : number )=> void >()
+
+		recheck() {
+			const paths = this.paths()
+			if (! paths.length) return null
+			const { versions, watchers } = this
+
+			for( const path of paths ) {
+				const version = $node.fs.statSync( path ).mtime.valueOf()
+				// this.js_error( path, null )
+				if( versions[ path ] && versions[ path ] !== version ) {
+					const watcher = watchers.get( path )
+					if( watcher ) watcher( path , 2 )
+				}
+				versions[ path ] = version
+			}
+			this.run()
+		}
+
+		@ $mol_mem
+		protected host() {
+			const paths = this.paths()
+			if (! paths.length) return null
+			
+			const host = $node.typescript.createWatchCompilerHost(
+
+				paths  as string[],
+				
+				{
+					... this.options(),
+					emitDeclarationOnly : true,
+				},
+				
+				{
+					... $node.typescript.sys ,
+					watchDirectory: ( path, cb ) => {
+						// console.log('watchDirectory', path )
+						this.watchers.set( path , cb )
+						return { close(){} }
+					},
+					writeFile : (path , data )=> {
+						this.write_add(path, data)
+					},
+					setTimeout : ( cb : any )=> {
+						this.run = cb
+					} ,
+					watchFile : (path:string, cb:(path:string,kind:number)=>any )=> {
+						// console.log('watchFile', path )
+						this.watchers.set( path , cb )
+						return { close(){ } }
+					},
+				},
+				
+				$node.typescript.createEmitAndSemanticDiagnosticsBuilderProgram,
+
+				( diagnostic )=> {
+
+					if( diagnostic.file ) {
+
+						const error = $node.typescript.formatDiagnostic( diagnostic , {
+							getCurrentDirectory : ()=> this.root() ,
+							getCanonicalFileName : ( path : string )=> path.toLowerCase() ,
+							getNewLine : ()=> '\n' ,
+						})
+						this.error( diagnostic.file.getSourceFile().fileName , error )
+						
+					} else {
+						const text = diagnostic.messageText
+						this.$.$mol_log3_fail({
+							place : `${this}.host()` ,
+							message: typeof text === 'string' ? text : text.messageText ,
+						})
+					}
+					
+				} ,
+
+				()=> {}, //watch reports
+				
+				[], // project refs
+				
+				{ // watch options
+					synchronousWatchDirectory: true,
+					watchFile: 5,
+					watchDirectory: 0,
+				},
+				
+			)
+
+			const service = $node.typescript.createWatchProgram( host )
+
+			return {
+				destructor : ()=> service.close()
+			}
+		}
+
+	}
+
+}

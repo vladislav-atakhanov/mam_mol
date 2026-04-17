@@ -1,8 +1,10 @@
 namespace $ {
 	
-	setTimeout( ()=> $mol_wire_async( $mol_build ).start( process.argv.slice( 2 ) ) )
-
-	
+	if ( $mol_rpc_worker.is_main() ) {
+		setTimeout( ()=> $mol_wire_async( $mol_build ).start( process.argv.slice( 2 ) ) )
+	} else {
+		new $mol_wire_atom( 'root', ()=> $.$mol_one.$mol_build_checker.start() ).fresh()
+	}
 
 	export class $mol_build extends $mol_object {
 		@ $mol_mem_key
@@ -17,6 +19,36 @@ namespace $ {
 		
 		static relative( root : string, paths: readonly string[] ) {
 			return this.$.$mol_build.root( [ $mol_file.relative( root ).path(), paths ])
+		}
+
+		@ $mol_mem_key
+		checker_rpc( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
+			const paths = this.tsPaths({ path , exclude , bundle })
+			if (! paths.length) return null
+
+			const handlers: $mol_build_checker_remote = {
+				paths: () => paths,
+				root: () => this.root().path(),
+				options: () => this.tsOptions(),
+				write: (rec: readonly ([path: string, data: string])[]) =>
+					rec.map(([path, data]) => this.$.$mol_file.relative( path ).text( data, 'virt' )),
+				error: (filename: string, error: string) => this.js_error( filename , error ),
+			}
+
+			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<{
+				recheck(): void
+			}>>({
+				options: $mol_const({
+					resourceLimits: { maxOldGenerationSizeMb: 1512 }
+				}),
+				uri: () => __filename,
+				handlers: () => handlers,
+			})
+		}
+
+
+		checker( params: { path : string , bundle : string , exclude : readonly string[] } ) {
+			return this.checker_rpc(params)?.remote() ?? null
 		}
 
 		@ $mol_mem
@@ -872,11 +904,12 @@ namespace $ {
 			var target = pack.resolve( `-/${bundle}.audit.js` )
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
-			this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
+			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
+			this.checker({ path , exclude: exclude_ext , bundle })?.recheck()
+			// this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
 			
 			const errors = [] as Error[]
 
-			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
 
 			for( const path of paths ) {
 

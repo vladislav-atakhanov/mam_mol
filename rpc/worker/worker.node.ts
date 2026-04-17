@@ -1,83 +1,126 @@
 namespace $ {
 	export class $mol_rpc_worker<
 		Remote_handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
-		Handlers extends $mol_rpc_handlers = $mol_rpc_handlers
-	> extends $mol_rpc<Remote_handlers, Handlers> {
+	> extends $mol_rpc<Remote_handlers> {
+		static is_main() {
+			return this.threads().isMainThread
+		}
 
-		threads() {
+		static threads() {
 			return $node['node:worker_threads'] as typeof import('node:worker_threads')
 		}
 
+		threads() { return this.$.$mol_rpc_worker.threads() }
+
 		uri() { return '' }
+
+		options() {
+			return {} as import('node:worker_threads').WorkerOptions
+		}
 
 		worker() {
 			const threads = this.threads()
-			return new threads.Worker(this.uri())
-		}
+			const worker = new threads.Worker(this.uri(), this.options())
 
-		worker_inited() {
-			const worker = this.worker()
+			worker.on('message', e => this.event_receive(e))
 
 			return new Promise<typeof worker>((done, fail) => {
-				worker.once('error', e => {
+				worker.on('error', (e: { code: string, message?: string }) => {
+					const err = e instanceof Error
+						? e
+						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
 
-					const error = typeof e !== 'object' || ! e
-						? 'Unknown'
-						: 'error' in e && e.error instanceof Error
-							? e.error
-							: new $mol_error_mix(('message' in e ? String(e.message) : null) || 'Unknown error', e)
-
-					fail(error)
+					fail(err)
+					this.error([ err ])
 				})
-				worker.once('online', () => done(worker))
-				worker.once('exit', code => fail(new Error('Worker exited', { cause: { code } })))
+
+				worker.on('online', () => done(worker))
+
+				worker.on('exit', code => {
+					if (code === 0) return
+					//schedule restart if not terminated normally
+					new $mol_after_timeout(this.restart_delay(), () => this.restarts(null))
+				})
+
 			})
 		}
 
 		@ $mol_mem
-		target() {
-			const parent = this.threads().parentPort
-			if ( parent ) return parent
+		error(next?: [ Error ]) {
+			if (next) this.$.$mol_fail_log(next[0])
+			return next ?? []
+		}
 
-			return $mol_wire_sync(this).worker_inited()
+		restart_delay() {
+			return 1000
+		}
+
+		@ $mol_mem
+		restarts(next?: null): number {
+			return 1 + ($mol_wire_probe(() => this.restarts()) ?? -1)
+		}
+
+		@ $mol_mem
+		protected override target() {
+			this.restarts()
+			const parent = this.threads().parentPort
+
+			if ( ! parent ) {
+				const worker = $mol_wire_sync(this).worker()
+				this.$.$mol_log3_rise({
+					place: `${this}.target`,
+					message: 'started',
+				})
+
+				const destructor = () => { worker.terminate().catch(e => this.$.$mol_fail_log(e)) }
+
+				return { host: worker, destructor }
+			}
+
+			const cb = (e: Event) => this.event_receive(e)
+			parent.on('message', cb)
+
+			const destructor = () => { parent.off('message', cb) }
+
+			this.$.$mol_log3_rise({
+				place: `${this}.target`,
+				message: 'attached',
+			})
+
+			return { host: parent, destructor }
 		}
 
 		@ $mol_action
-		override remote_call<Method extends keyof Remote_handlers>(method : Method , arg : Parameters<Remote_handlers[Method]>[0]) {
-			const channel = new $mol_rpc_channel<ReturnType<Remote_handlers[Method]>>()
+		override channel(method : string , args : readonly unknown[]) {
+			const channel = new $mol_rpc_channel()
 			const sender = channel.sender()
 
-			this.target().postMessage([ method, arg, sender ], [ sender as any ])
+			this.$.$mol_log3_rise({
+				place: `${this}.send`,
+				message: 'sended',
+				method,
+			})
+
+			this.target().host?.postMessage([ method, args, sender ], [ sender as any ])
 
 			return channel
 		}
 
-		protected event_receive(e: Event & { data?: unknown, port?: MessagePort }) {
-			if (! Array.isArray(e.data) ) return
-			if ( e.data.length !== 3) return
+		override toString() {
+			return `${this.threads().isMainThread ? 'main' : 'thread'} ${super.toString()}`
+		}
 
-			const [ name, arg, sender ] = e.data
+		event_receive(data: unknown) {
+			if (! Array.isArray(data) ) return
+			if ( data.length !== 3) return
+
+			const [ name, args, sender ] = data
 
 			if (typeof name !== 'string') return
 			if ( ! (sender instanceof MessagePort) ) return
 
-			const response = this.response(name, arg)
-
-			sender.postMessage(response)
+			this.handle_async([ name, args, sender ])
 		}
 
-		@ $mol_mem
-		protected override listener() {
-			const target = this.target()
-			const cb = $mol_wire_async((e: Event) => this.event_receive(e))
-
-			target.on('message', cb)
-
-			return { destructor: () => {
-				target.off('message', cb)
-				// terminate worker if target is worker
-				;(target as any)[Symbol.asyncDispose]?.()
-			} }
-		}
 	}
 }
