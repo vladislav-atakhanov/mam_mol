@@ -3,7 +3,7 @@ namespace $ {
 	if ( $mol_rpc_worker.is_main() ) {
 		setTimeout( ()=> $mol_wire_async( $mol_build ).start( process.argv.slice( 2 ) ) )
 	} else {
-		new $mol_wire_atom( 'root', ()=> $.$mol_one.$mol_build_checker.start() ).fresh()
+		new $mol_wire_atom( '$mol_build_checker', ()=> $.$mol_one.$mol_build_checker.start() ).fresh()
 	}
 
 	export class $mol_build extends $mol_object {

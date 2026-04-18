@@ -23,6 +23,7 @@ namespace $ {
 
 			const cb = (e: MessageEvent) => this.event_receive(e)
 			let destructing = false
+
 			const destructor = () => {
 				destructing = true
 				worker.off('message', cb)
@@ -33,32 +34,33 @@ namespace $ {
 
 			worker.on('message', cb)
 
-			return new Promise<typeof worker>((done, fail) => {
+			return new Promise<typeof worker>((done, reject: null | ((reason?: any) => void)) => {
+
 				worker.on('error', (e: { code: string, message?: string }) => {
 					if (destructing) return
 					const err = e instanceof Error
 						? e
 						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
 
-					fail(err)
-					this.error([ err ])
+					if (reject) reject(err)
+					else this.error([ err ])
 				})
-
-				worker.on('online', () => done(worker))
 
 				worker.on('exit', code => {
 					if (destructing) return
-					if (code === 0) return
-					//schedule restart if not terminated normally
-					new $mol_after_timeout(this.restart_delay(), () => this.restarts(null))
+					if (reject) return reject(new Error('Worker exited', { cause: { code }}))
+
+					// liveness = reject === null
+
+					this.restarts(null)
+				})
+	
+				worker.on('online', () => {
+					reject = null
+					done(worker)
 				})
 
 			})
-		}
-
-
-		restart_delay() {
-			return 1000
 		}
 
 		@ $mol_mem
