@@ -42,8 +42,10 @@ namespace $ {
 						? e
 						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
 
-					if (reject) reject(err)
-					else this.error([ err ])
+					if (reject) return reject(err)
+
+					this.restarts(null)
+					this.error([ err ])
 				})
 
 				worker.on('exit', code => {
