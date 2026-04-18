@@ -906,10 +906,13 @@ namespace $ {
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
 			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
-			this.checker({ path , exclude: exclude_ext , bundle })?.recheck()
-			// const service = this.tsService({ path , exclude : exclude_ext , bundle })
-			// service?.recheck()
-			
+	
+			if (! Boolean(this.$.$mol_env()['MAM_TS_WORKER_DISABLED'])) {
+				this.checker({ path , exclude: exclude_ext , bundle })?.recheck()
+			} else {
+				this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
+			}
+
 			const errors = [] as Error[]
 
 
