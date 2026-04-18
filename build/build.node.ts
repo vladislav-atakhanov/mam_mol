@@ -30,8 +30,7 @@ namespace $ {
 				paths: () => paths,
 				root: () => this.root().path(),
 				options: () => this.tsOptions(),
-				write: (rec: readonly ([path: string, data: string])[]) =>
-					rec.map(([path, data]) => this.$.$mol_file.relative( path ).text( data, 'virt' )),
+				write: (path: string, data: string) => this.$.$mol_file.relative( path ).text( data, 'virt' ),
 				error: (filename: string, error: string) => this.js_error( filename , error ),
 			}
 
@@ -48,7 +47,9 @@ namespace $ {
 
 
 		checker( params: { path : string , bundle : string , exclude : readonly string[] } ) {
-			return this.checker_rpc(params)?.remote() ?? null
+			const checker = this.checker_rpc(params)
+			checker?.status()
+			return checker?.remote() ?? null
 		}
 
 		@ $mol_mem
@@ -906,7 +907,8 @@ namespace $ {
 
 			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
 			this.checker({ path , exclude: exclude_ext , bundle })?.recheck()
-			// this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
+			// const service = this.tsService({ path , exclude : exclude_ext , bundle })
+			// service?.recheck()
 			
 			const errors = [] as Error[]
 

@@ -5,7 +5,7 @@ namespace $ {
 		root(): string
 		options(): ReturnType<typeof $node.typescript.getDefaultCompilerOptions>
 		error(filename: string, error: string): void
-		write(rec: readonly ([ path: string, data: string ])[]): void
+		write(path: string, data: string): void
 	}
 
 	export class $mol_build_checker extends $mol_object {
@@ -24,29 +24,23 @@ namespace $ {
 			return next ?? this.remote().options() ?? $node.typescript.getDefaultCompilerOptions()
 		}
 
-		protected error_flush_series = Promise.resolve(null)
-		error(filename: string, error: string) {
-			this.error_flush_series = this.error_flush_series
-				.finally($mol_wire_async(() => this.remote().error(filename, error)))
-		}
-
 		protected writes = [] as [path: string, data: string][]
-		protected write_flush_series = Promise.resolve(null)
+		protected write_timeout = null as null | $mol_after_timeout
 
 		protected write_flush() {
-			const writes = this.writes
+			this.write_timeout?.destructor()
 
-			this.write_flush_series = this.write_flush_series
-				.finally($mol_wire_async(() => this.remote().write(writes)))
+			for (const [path, data] of this.writes) {
+				$mol_error_fence(() => this.remote().write(path, data), e => (this.$.$mol_fail_log(e), null))
+			}
 
 			this.writes = []
+			this.write_timeout = null
 		}
 
-		protected timeout = null as null | $mol_after_timeout
 		write_add(path: string, data: string) {
 			this.writes.push([ path, data ])
-			this.timeout?.destructor()
-			this.timeout = new $mol_after_timeout(300, () => this.write_flush())
+			this.write_timeout = this.write_timeout ?? new $mol_after_timeout(300, $mol_wire_async(() => this.write_flush()))
 		}
 
 		@ $mol_mem
@@ -68,34 +62,64 @@ namespace $ {
 		protected versions = {} as Record<string, number>
 		protected watchers = new Map< string , ( path : string , kind : number )=> void >()
 
-		recheck() {
+
+		protected errors = [] as [filename: string, error: string][]
+		protected errors_timer = null as null | $mol_after_timeout
+
+		protected error_add(filename: string, error: string) {
+			this.errors.push([filename, error])
+			this.errors_timer = this.errors_timer ?? new $mol_after_timeout(200, $mol_wire_async(() => this.errors_flush()))
+		}
+
+		@ $mol_action
+		protected errors_flush() {
+			this.errors_timer?.destructor()
+			for (const [ filename, error ] of this.errors) {
+				$mol_error_fence(
+					() => this.remote().error(filename, error),
+					e => (this.$.$mol_fail_log(e), null)
+				)
+			}
+
+			this.errors = []
+			this.errors_timer = null
+		}
+
+		@ $mol_action
+		protected recheck_internal() {
 			const paths = this.paths()
 			if (! paths.length) return null
-			const { versions, watchers } = this
 
 			for( const path of paths ) {
 				const version = $node.fs.statSync( path ).mtime.valueOf()
-				// this.js_error( path, null )
-				if( versions[ path ] && versions[ path ] !== version ) {
-					const watcher = watchers.get( path )
+				if( this.versions[ path ] && this.versions[ path ] !== version ) {
+					const watcher = this.watchers.get( path )
 					if( watcher ) watcher( path , 2 )
 				}
-				versions[ path ] = version
+				this.versions[ path ] = version
 			}
 			this.run()
+		}
+
+		recheck() {
+			this.host()
+			this.recheck_internal()
+			this.errors_flush()
 		}
 
 		@ $mol_mem
 		protected host() {
 			const paths = this.paths()
 			if (! paths.length) return null
-			
+			const options = this.options()
+			const root = this.root()
+
 			const host = $node.typescript.createWatchCompilerHost(
 
 				paths  as string[],
 				
 				{
-					... this.options(),
+					... options,
 					emitDeclarationOnly : true,
 				},
 				
@@ -126,11 +150,13 @@ namespace $ {
 					if( diagnostic.file ) {
 
 						const error = $node.typescript.formatDiagnostic( diagnostic , {
-							getCurrentDirectory : ()=> this.root() ,
+							getCurrentDirectory : ()=> root ,
 							getCanonicalFileName : ( path : string )=> path.toLowerCase() ,
 							getNewLine : ()=> '\n' ,
 						})
-						this.error( diagnostic.file.getSourceFile().fileName , error )
+						const name = diagnostic.file.getSourceFile().fileName
+
+						this.error_add( name , error )
 						
 					} else {
 						const text = diagnostic.messageText

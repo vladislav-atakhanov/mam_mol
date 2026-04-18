@@ -6,7 +6,7 @@ namespace $ {
 		[Key in keyof Obj]: Obj[Key] extends Function ? Obj[Key] : never
 	}
 
-	type Payload = [name : string , args : readonly unknown[], sender: MessagePort]
+	export type $mol_rpc_payload = [name : string , args : readonly unknown[], sender: MessagePort]
 
 	export class $mol_rpc<
 		Remote_handlers extends $mol_rpc_handlers = $mol_rpc_handlers,
@@ -16,11 +16,11 @@ namespace $ {
 			return {} as Record<string, Function>
 		}
 
-		handle_async(payload: Payload) {
+		handle_async(payload: $mol_rpc_payload) {
 			return $mol_wire_async(this).handle(payload)
 		}
 
-		handle([ name, args, sender ]: Payload) {
+		handle([ name, args, sender ]: $mol_rpc_payload) {
 			let result, error
 
 			try {
@@ -31,19 +31,21 @@ namespace $ {
 				error = { message: (e as Error).message, name, args, cause: (e as Error).cause }
 			}
 
-			this.$.$mol_log3_rise({
-				place: `${this}.handle()`,
-				message: name,
-				result,
-				error,
-			})
-
 			sender.postMessage({ result , error })
+		}
+
+		@ $mol_mem
+		protected target() {
+			return {
+				postMessage(payload: $mol_rpc_payload) {}
+			}
 		}
 
 		@ $mol_action
 		channel(method : string , args : readonly unknown[]) {
-			return new $mol_rpc_channel()
+			const channel = new $mol_rpc_channel()
+			this.target().postMessage([method, args, channel.sender()])
+			return channel
 		}
 
 		@ $mol_mem
@@ -56,11 +58,17 @@ namespace $ {
 			} ) as Remote_handlers
 		}
 
-		protected target() {}
+		@ $mol_mem
+		error(next?: [ Error ]) {
+			if (next) this.$.$mol_fail_log(next[0])
+			return next ?? []
+		}
 
 		@ $mol_mem
 		status() {
 			this.target()
+			const error = this.error()[0]
+			if (error) $mol_fail_hidden(error)
 			return null
 		}
 

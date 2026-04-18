@@ -18,18 +18,13 @@ namespace $ {
 
 			const cb = (e: MessageEvent) => this.event_receive(e)
 			host.addEventListener('message', cb)
-			const destructor = () => host.removeEventListener('message', cb)
 
-			return { host, destructor }
+			const postMessage = (payload: $mol_rpc_payload) => host.postMessage([ payload[0], payload[1] ], '*', [ payload[2] ])
+			const destructor = () => { host.removeEventListener('message', cb) }
+
+			return { postMessage, destructor }
 		}
 
-		@ $mol_action
-		override channel(method : string , args : readonly unknown[]) {
-			const channel = new $mol_rpc_channel()
-			this.target().host.postMessage([ method, args ], '*', [ channel.sender() ])
-
-			return channel
-		}
 
 		event_receive(e: MessageEvent) {
 			if (! Array.isArray(e.data) ) return

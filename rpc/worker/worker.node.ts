@@ -19,13 +19,23 @@ namespace $ {
 		}
 
 		worker() {
-			const threads = this.threads()
-			const worker = new threads.Worker(this.uri(), this.options())
+			const { Worker } = this.threads()
 
-			worker.on('message', e => this.event_receive(e))
+			const cb = (e: MessageEvent) => this.event_receive(e)
+			let destructing = false
+			const destructor = () => {
+				destructing = true
+				worker.off('message', cb)
+				worker.terminate().catch(e => this.$.$mol_fail_log(e))
+			}
+
+			const worker = Object.assign(new Worker(this.uri(), this.options()), { destructor })
+
+			worker.on('message', cb)
 
 			return new Promise<typeof worker>((done, fail) => {
 				worker.on('error', (e: { code: string, message?: string }) => {
+					if (destructing) return
 					const err = e instanceof Error
 						? e
 						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
@@ -37,6 +47,7 @@ namespace $ {
 				worker.on('online', () => done(worker))
 
 				worker.on('exit', code => {
+					if (destructing) return
 					if (code === 0) return
 					//schedule restart if not terminated normally
 					new $mol_after_timeout(this.restart_delay(), () => this.restarts(null))
@@ -45,11 +56,6 @@ namespace $ {
 			})
 		}
 
-		@ $mol_mem
-		error(next?: [ Error ]) {
-			if (next) this.$.$mol_fail_log(next[0])
-			return next ?? []
-		}
 
 		restart_delay() {
 			return 1000
@@ -64,47 +70,21 @@ namespace $ {
 		protected override target() {
 			this.restarts()
 			const parent = this.threads().parentPort
-
-			if ( ! parent ) {
-				const worker = $mol_wire_sync(this).worker()
-				this.$.$mol_log3_rise({
-					place: `${this}.target()`,
-					message: 'started',
-				})
-
-				const destructor = () => { worker.terminate().catch(e => this.$.$mol_fail_log(e)) }
-
-				return { host: worker, destructor }
-			}
+			const worker = parent ? null : $mol_wire_sync(this).worker()
 
 			const cb = (e: Event) => this.event_receive(e)
-			parent.on('message', cb)
+			parent?.on('message', cb)
 
-			const destructor = () => { parent.off('message', cb) }
+			const destructor = () => {
+				worker?.destructor()
+				parent?.off('message', cb)
+			}
 
-			this.$.$mol_log3_rise({
-				place: `${this}.target()`,
-				message: 'started',
-			})
+			const postMessage = (payload: $mol_rpc_payload) => {
+				(parent ?? worker)?.postMessage(payload, [ payload[2] as any ])
+			}
 
-			return { host: parent, destructor }
-		}
-
-		@ $mol_action
-		override channel(method : string , args : readonly unknown[]) {
-			const channel = new $mol_rpc_channel()
-			const sender = channel.sender()
-
-			this.$.$mol_log3_rise({
-				place: `${this}.channel()`,
-				message: method,
-				method,
-				args,
-			})
-
-			this.target().host?.postMessage([ method, args, sender ], [ sender as any ])
-
-			return channel
+			return { postMessage, destructor }
 		}
 
 		override toString() {
