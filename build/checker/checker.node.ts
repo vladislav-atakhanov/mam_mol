@@ -1,27 +1,30 @@
 namespace $ {
 
 	export type $mol_build_checker_remote = {
-		paths(): readonly string[]
-		root(): string
-		options(): ReturnType<typeof $node.typescript.getDefaultCompilerOptions>
 		error(filename: string, error: string): void
 		write(path: string, data: string): void
+	}
+
+	export type $mol_build_checker_worker_data = {
+		paths: readonly string[]
+		root: string
+		options: ReturnType<typeof $node.typescript.getDefaultCompilerOptions>
 	}
 
 	export class $mol_build_checker extends $mol_object {
 		@ $mol_mem
 		paths(next?: readonly string[]): readonly string[] {
-			return next ?? this.remote().paths() ?? []
+			return next ?? this.worker_data().paths ?? []
 		}
 
 		@ $mol_mem
 		root(next?: string): string {
-			return next ?? this.remote().root() ?? ''
+			return next ?? this.worker_data().root ?? ''
 		}
 
 		@ $mol_mem
-		options(next?: ReturnType<typeof $node.typescript.getDefaultCompilerOptions>): ReturnType<typeof $node.typescript.getDefaultCompilerOptions> {
-			return next ?? this.remote().options() ?? $node.typescript.getDefaultCompilerOptions()
+		options(next?: ReturnType<typeof $node.typescript.getDefaultCompilerOptions>) {
+			return next ?? this.worker_data().options ?? $node.typescript.getDefaultCompilerOptions()
 		}
 
 		protected writes = [] as [path: string, data: string][]
@@ -49,6 +52,8 @@ namespace $ {
 				handlers: () => this as $mol_rpc_methods<this>,
 			})
 		}
+
+		protected worker_data() { return this.rpc().worker_data() as Partial<$mol_build_checker_worker_data> }
 
 		protected remote() { return this.rpc().remote() }
 

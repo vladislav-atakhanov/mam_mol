@@ -27,18 +27,22 @@ namespace $ {
 			if (! paths.length) return null
 
 			const handlers: $mol_build_checker_remote = {
-				paths: () => paths,
-				root: () => this.root().path(),
-				options: () => this.tsOptions(),
 				write: (path: string, data: string) => this.$.$mol_file.relative( path ).text( data, 'virt' ),
 				error: (filename: string, error: string) => this.js_error( filename , error ),
+			}
+
+			const workerData: $mol_build_checker_worker_data = {
+				paths,
+				root: this.root().path(),
+				options: this.tsOptions(),
 			}
 
 			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<{
 				recheck(): void
 			}>>({
 				options: $mol_const({
-					resourceLimits: { maxOldGenerationSizeMb: 1512 }
+					resourceLimits: { maxOldGenerationSizeMb: 1512 },
+					workerData
 				}),
 				uri: () => __filename,
 				handlers: () => handlers,

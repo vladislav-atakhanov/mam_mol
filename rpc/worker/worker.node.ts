@@ -18,6 +18,10 @@ namespace $ {
 			return {} as import('node:worker_threads').WorkerOptions
 		}
 
+		worker_data() {
+			return this.threads().workerData as unknown
+		}
+
 		worker() {
 			const { Worker } = this.threads()
 
@@ -31,9 +35,14 @@ namespace $ {
 
 			const worker = Object.assign(new Worker(this.uri(), this.options()), { destructor })
 
-			worker.on('message', e => destructing ? null : this.event_receive(e))
+			let inited = false
+			worker.on('message', e => {
+				if (destructing) return
+				inited = true
+				this.event_receive(e)
+			})
 
-			return new Promise<typeof worker>((done, reject: null | ((reason?: any) => void)) => {
+			return new Promise<typeof worker>((done, reject) => {
 
 				worker.on('error', (e: { code: string, message?: string }) => {
 					if (destructing) return
@@ -41,7 +50,7 @@ namespace $ {
 						? e
 						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
 
-					if (reject) return reject(err)
+					if (! inited) return reject(err)
 
 					this.restarts(null)
 					this.error([ err ])
@@ -49,17 +58,14 @@ namespace $ {
 
 				worker.on('exit', code => {
 					if (destructing) return
-					if (reject) return reject(new Error('Worker exited', { cause: { code }}))
+					if (! inited) return reject(new Error('Worker exited', { cause: { code }}))
 
 					// liveness = reject === null
 
 					this.restarts(null)
 				})
 	
-				worker.on('online', () => {
-					reject = null
-					done(worker)
-				})
+				worker.on('online', () => done(worker))
 
 			})
 		}
