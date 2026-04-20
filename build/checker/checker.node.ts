@@ -58,8 +58,13 @@ namespace $ {
 		protected remote() { return this.rpc().remote() }
 
 		start() {
-			this.rpc().status()
-			this.host()
+			$mol_error_fence(() => this.rpc().status(), e => (this.start_error(e), null))
+			$mol_error_fence(() => this.host(), e => (this.start_error(e), null))
+		}
+
+		protected start_error(e: Error) {
+			this.$.$mol_fail_log(e)
+			process.exit(1)
 		}
 
 		protected run() {}
