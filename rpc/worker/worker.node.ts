@@ -21,18 +21,17 @@ namespace $ {
 		worker() {
 			const { Worker } = this.threads()
 
-			const cb = (e: MessageEvent) => this.event_receive(e)
 			let destructing = false
 
 			const destructor = () => {
+				if (destructing) return
 				destructing = true
-				worker.off('message', cb)
 				worker.terminate().catch(e => this.$.$mol_fail_log(e))
 			}
 
 			const worker = Object.assign(new Worker(this.uri(), this.options()), { destructor })
 
-			worker.on('message', cb)
+			worker.on('message', e => destructing ? null : this.event_receive(e))
 
 			return new Promise<typeof worker>((done, reject: null | ((reason?: any) => void)) => {
 
