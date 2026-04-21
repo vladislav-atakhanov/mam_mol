@@ -45,7 +45,7 @@ namespace $ {
 				options: this.tsOptions(),
 			}
 
-			const maxOldGenerationSizeMb = this.ts_memory_limit()
+			const maxOldGenerationSizeMb = this.checker_max_mem()
 
 			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<{
 				recheck(): void
@@ -61,10 +61,9 @@ namespace $ {
 			})
 		}
 
-		ts_memory_limit() {
-			return Number(this.$.$mol_env().MAM_TS_WORKER_MAX_MEM || '2560')
+		checker_max_mem() {
+			return Number(this.$.$mol_env().MOL_BUILD_CHECKER_MAX_MEM || '2560')
 		}
-
 
 		checker( params: { path : string , bundle : string , exclude : readonly string[] } ) {
 			const checker = this.checker_rpc(params)
@@ -915,6 +914,10 @@ namespace $ {
 			return [ targetMJS, targetJSMap ]
 		}
 
+		checker_disabled() {
+			return Boolean(this.$.$mol_env().MAM_BUILD_CHECKER_DISABLED)
+		}
+
 		@ $mol_mem_key
 		bundleAuditJS( { path , exclude , bundle } : { path : string , exclude : readonly string[] , bundle : string } ) : $mol_file[] {
 
@@ -925,7 +928,7 @@ namespace $ {
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
 	
-			if (! Boolean(this.$.$mol_env().MAM_TS_WORKER_DISABLED)) {
+			if (! this.checker_disabled()) {
 				const checker = this.checker({ path , exclude: exclude_ext , bundle })
 				checker?.recheck()
 			} else {
