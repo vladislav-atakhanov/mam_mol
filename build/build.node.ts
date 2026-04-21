@@ -914,8 +914,8 @@ namespace $ {
 			return [ targetMJS, targetJSMap ]
 		}
 
-		checker_disabled() {
-			return Boolean(this.$.$mol_env().MAM_BUILD_CHECKER_DISABLED)
+		checker_synced() {
+			return Boolean(this.$.$mol_env().MAM_BUILD_CHECKER_SYNCED)
 		}
 
 		@ $mol_mem_key
@@ -928,11 +928,11 @@ namespace $ {
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
 	
-			if (! this.checker_disabled()) {
+			if (this.checker_synced()) {
+				this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
+			} else {
 				const checker = this.checker({ path , exclude: exclude_ext , bundle })
 				checker?.recheck()
-			} else {
-				this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
 			}
 
 			const errors = [] as Error[]
