@@ -44,11 +44,11 @@ namespace $ {
 		protected fail_callbacks = [] as ((e: unknown) => void)[]
 
 		@ $mol_mem
-		error(next?: [Error] | null) {
+		error(next?: [Error]) {
 			this.target()
 			if (next === undefined) return null
 
-			for (const callback of this.fail_callbacks) callback(next?.[0])
+			for (const callback of this.fail_callbacks) callback(next[0])
 			this.fail_callbacks = []
 
 			return next

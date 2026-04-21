@@ -59,15 +59,16 @@ namespace $ {
 					if ( ! inited) return fail(err)
 
 					this.$.$mol_fail_log(err)
-					this.error([err])
+					this.error([ err ])
 					this.restarts(null)
 				})
 
 				worker.on('exit', code => {
 					if (destructing) return
 					destructing = true
-					if (! inited) return fail(new Error('Worker exited', { cause: { code }}))
-					this.error(null)
+					const err = new Error('Worker exited', { cause: { code }})
+					if (! inited) return fail(err)
+					this.error([ err ]) // Need to reset callers fail callbacks
 					this.restarts(null)
 				})
 	
