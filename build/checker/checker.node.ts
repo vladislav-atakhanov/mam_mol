@@ -1,8 +1,8 @@
 namespace $ {
 
 	export type $mol_build_checker_remote = {
-		error(filename: string, error: string): void
-		write(path: string, data: string): void
+		error(rec: [filename: string, error: string][]): void
+		write(rec: [path: string, data: string][]): void
 	}
 
 	export type $mol_build_checker_worker_data = {
@@ -33,9 +33,7 @@ namespace $ {
 		protected write_flush() {
 			this.write_timeout?.destructor()
 
-			for (const [path, data] of this.writes) {
-				$mol_error_fence(() => this.remote().write(path, data), e => (this.$.$mol_fail_log(e), null))
-			}
+			$mol_error_fence(() => this.remote().write(this.writes), e => (this.$.$mol_fail_log(e), null))
 
 			this.writes = []
 			this.write_timeout = null
@@ -43,7 +41,7 @@ namespace $ {
 
 		write_add(path: string, data: string) {
 			this.writes.push([ path, data ])
-			this.write_timeout = this.write_timeout ?? new $mol_after_timeout(300, $mol_wire_async(() => this.write_flush()))
+			this.write_timeout = this.write_timeout ?? new $mol_after_timeout(200, $mol_wire_async(() => this.write_flush()))
 		}
 
 		@ $mol_mem
@@ -58,13 +56,14 @@ namespace $ {
 		protected remote() { return this.rpc().remote() }
 
 		start() {
-			$mol_error_fence(() => this.rpc().status(), e => (this.start_error(e), null))
-			$mol_error_fence(() => this.host(), e => (this.start_error(e), null))
-		}
-
-		protected start_error(e: Error) {
-			this.$.$mol_fail_log(e)
-			process.exit(1)
+			try {
+				this.remote()
+				this.host()
+			} catch(error) {
+				if ($mol_promise_like(error)) $mol_fail_hidden(error)
+				this.$.$mol_fail_log(error)
+				process.exit(1)
+			}
 		}
 
 		protected run() {}
@@ -84,12 +83,10 @@ namespace $ {
 		@ $mol_action
 		protected errors_flush() {
 			this.errors_timer?.destructor()
-			for (const [ filename, error ] of this.errors) {
-				$mol_error_fence(
-					() => this.remote().error(filename, error),
-					e => (this.$.$mol_fail_log(e), null)
-				)
-			}
+			$mol_error_fence(
+				() => this.remote().error(this.errors),
+				e => (this.$.$mol_fail_log(e), null)
+			)
 
 			this.errors = []
 			this.errors_timer = null
@@ -115,6 +112,8 @@ namespace $ {
 			this.host()
 			this.recheck_internal()
 			this.errors_flush()
+			// this.write_flush()
+			return null
 		}
 
 		@ $mol_mem

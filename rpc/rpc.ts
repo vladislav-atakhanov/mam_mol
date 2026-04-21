@@ -37,39 +37,66 @@ namespace $ {
 		@ $mol_mem
 		protected target() {
 			return {
-				postMessage(payload: $mol_rpc_payload) {}
+				send(payload: $mol_rpc_payload) {}
 			}
 		}
 
-		@ $mol_action
-		channel(method : string , args : readonly unknown[]) {
-			const channel = new $mol_rpc_channel()
-			this.target().postMessage([method, args, channel.sender()])
-			return channel
+		protected fail_callbacks = [] as ((e: unknown) => void)[]
+
+		@ $mol_mem
+		error(next?: [Error] | null) {
+			this.target()
+			if (next === undefined) return null
+
+			for (const callback of this.fail_callbacks) callback(next?.[0])
+			this.fail_callbacks = []
+
+			return next
+		}
+
+		call_async(method : string , args : readonly unknown[]) {
+			const target = this.target()
+			const channel = new MessageChannel()
+			target.send([method, args, channel.port2 ])
+
+			return new Promise<unknown>((done, fail) => {
+				const remove_callback = () => this.fail_callbacks = this.fail_callbacks.filter(src => src !== fail)
+
+				this.fail_callbacks.push(fail)
+
+				channel.port1.onmessage = e => {
+					remove_callback()
+
+					const error = e.data?.error
+					if (! error ) return done(e.data.result)
+
+					fail(new Error(error.message || 'Data error', { cause: {
+						method,
+						args,
+						error
+					} }))
+				}
+
+				channel.port1.onmessageerror = event => {
+					remove_callback()
+					fail(new Error('Message error', { cause: { method, args, event } } ) )
+				}
+			})
+		}
+
+		protected call(method : string , args : readonly unknown[]) {
+			return $mol_wire_sync(this).call_async(method, args)
 		}
 
 		@ $mol_mem
 		remote() {
+			this.target()
 			return new Proxy( {} , {
 				get : ( target : any , name : string ) =>
 					( ... args : readonly unknown[] ) => name === 'destructor'
 						? null
-						: this.channel(name, args).result()
+						: this.call(name, args)
 			} ) as Remote_handlers
-		}
-
-		@ $mol_mem
-		error(next?: [ Error ]) {
-			if (next) this.$.$mol_fail_log(next[0])
-			return next ?? []
-		}
-
-		@ $mol_mem
-		status() {
-			this.target()
-			const error = this.error()[0]
-			if (error) $mol_fail_hidden(error)
-			return null
 		}
 
 	}

@@ -30,42 +30,58 @@ namespace $ {
 			const destructor = () => {
 				if (destructing) return
 				destructing = true
+				this.$.$mol_log3_rise({
+					place: `${this}.worker#destructor`,
+					message: 'terminate',
+				})
 				worker.terminate().catch(e => this.$.$mol_fail_log(e))
 			}
 
 			const worker = Object.assign(new Worker(this.uri(), this.options()), { destructor })
 
 			let inited = false
-			worker.on('message', e => {
-				if (destructing) return
-				inited = true
-				this.event_receive(e)
+
+			this.$.$mol_log3_come({
+				place: `${this}.worker()`,
+				message: 'starting',
 			})
 
-			return new Promise<typeof worker>((done, reject) => {
+			return new Promise<typeof worker>((done, fail) => {
 
-				worker.on('error', (e: { code: string, message?: string }) => {
+				worker.on('error', (err: Error & { code?: string }) => {
 					if (destructing) return
-					const err = e instanceof Error
-						? e
-						: new Error((typeof e === 'object' && e ? e.message : null) || String(e), { cause: e })
+					if (! inited) this.$.$mol_log3_fail({
+						place: `${this}.worker()`,
+						message: 'failed',
+						err,
+					})
 
-					if (! inited) return reject(err)
+					if ( ! inited) return fail(err)
 
+					this.$.$mol_fail_log(err)
+					this.error([err])
 					this.restarts(null)
-					this.error([ err ])
 				})
 
 				worker.on('exit', code => {
 					if (destructing) return
-					if (! inited) return reject(new Error('Worker exited', { cause: { code }}))
-
-					// liveness = reject === null
-
+					destructing = true
+					if (! inited) return fail(new Error('Worker exited', { cause: { code }}))
+					this.error(null)
 					this.restarts(null)
 				})
 	
-				worker.on('online', () => done(worker))
+				worker.on('message', e => {
+					if (destructing) return
+					if (! inited) this.$.$mol_log3_done({
+						place: `${this}.worker()`,
+						message: 'started',
+					})
+
+					if (! inited) done(worker)
+					inited = true
+					this.receive(e)
+				})
 
 			})
 		}
@@ -81,7 +97,7 @@ namespace $ {
 			const parent = this.threads().parentPort
 			const worker = parent ? null : $mol_wire_sync(this).worker()
 
-			const cb = (e: Event) => this.event_receive(e)
+			const cb = (e: Event) => this.receive(e)
 			parent?.on('message', cb)
 
 			const destructor = () => {
@@ -89,18 +105,18 @@ namespace $ {
 				parent?.off('message', cb)
 			}
 
-			const postMessage = (payload: $mol_rpc_payload) => {
+			const send = (payload: $mol_rpc_payload) => {
 				(parent ?? worker)?.postMessage(payload, [ payload[2] as any ])
 			}
 
-			return { postMessage, destructor }
+			return { send, destructor }
 		}
 
 		override toString() {
 			return `${this.threads().isMainThread ? 'main' : 'thread'} ${super.toString()}`
 		}
 
-		event_receive(data: unknown) {
+		receive(data: unknown) {
 			if (! Array.isArray(data) ) return
 			if ( data.length !== 3) return
 

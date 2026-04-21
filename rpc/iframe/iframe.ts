@@ -19,10 +19,10 @@ namespace $ {
 			const cb = (e: MessageEvent) => this.event_receive(e)
 			host.addEventListener('message', cb)
 
-			const postMessage = (payload: $mol_rpc_payload) => host.postMessage([ payload[0], payload[1] ], '*', [ payload[2] ])
+			const send = (payload: $mol_rpc_payload) => host.postMessage([ payload[0], payload[1] ], '*', [ payload[2] ])
 			const destructor = () => { host.removeEventListener('message', cb) }
 
-			return { postMessage, destructor }
+			return { send, destructor }
 		}
 
 

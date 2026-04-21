@@ -27,8 +27,16 @@ namespace $ {
 			if (! paths.length) return null
 
 			const handlers: $mol_build_checker_remote = {
-				write: (path: string, data: string) => this.$.$mol_file.relative( path ).text( data, 'virt' ),
-				error: (filename: string, error: string) => this.js_error( filename , error ),
+				write: rec => {
+					for (const [path, data] of rec) {
+						this.$.$mol_file.relative( path ).text( data, 'virt' )
+					}
+				},
+				error: rec => {
+					for (const [filename, error] of rec) {
+						this.js_error( filename , error )
+					}
+				},
 			}
 
 			const workerData: $mol_build_checker_worker_data = {
@@ -37,11 +45,15 @@ namespace $ {
 				options: this.tsOptions(),
 			}
 
+			const maxOldGenerationSizeMb = this.ts_memory_limit()
+
 			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<{
 				recheck(): void
 			}>>({
 				options: $mol_const({
-					resourceLimits: { maxOldGenerationSizeMb: 1512 },
+					resourceLimits: {
+						maxOldGenerationSizeMb,
+					},
 					workerData
 				}),
 				uri: () => __filename,
@@ -49,10 +61,13 @@ namespace $ {
 			})
 		}
 
+		ts_memory_limit() {
+			return Number(this.$.$mol_env().MAM_TS_WORKER_MAX_MEM || '2560')
+		}
+
 
 		checker( params: { path : string , bundle : string , exclude : readonly string[] } ) {
 			const checker = this.checker_rpc(params)
-			checker?.status()
 			return checker?.remote() ?? null
 		}
 
@@ -909,16 +924,16 @@ namespace $ {
 			var target = pack.resolve( `-/${bundle}.audit.js` )
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
-			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
 	
-			if (! Boolean(this.$.$mol_env()['MAM_TS_WORKER_DISABLED'])) {
-				this.checker({ path , exclude: exclude_ext , bundle })?.recheck()
+			if (! Boolean(this.$.$mol_env().MAM_TS_WORKER_DISABLED)) {
+				const checker = this.checker({ path , exclude: exclude_ext , bundle })
+				checker?.recheck()
 			} else {
 				this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
 			}
 
 			const errors = [] as Error[]
-
+			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
 
 			for( const path of paths ) {
 
