@@ -30,10 +30,6 @@ namespace $ {
 			const destructor = () => {
 				if (destructing) return
 				destructing = true
-				this.$.$mol_log3_rise({
-					place: `${this}.worker#destructor`,
-					message: 'terminate',
-				})
 				worker.terminate().catch(e => this.$.$mol_fail_log(e))
 			}
 
@@ -41,21 +37,10 @@ namespace $ {
 
 			let inited = false
 
-			this.$.$mol_log3_come({
-				place: `${this}.worker()`,
-				message: 'starting',
-			})
-
 			return new Promise<typeof worker>((done, fail) => {
 
 				worker.on('error', (err: Error & { code?: string }) => {
 					if (destructing) return
-					if (! inited) this.$.$mol_log3_fail({
-						place: `${this}.worker()`,
-						message: 'failed',
-						err,
-					})
-
 					if ( ! inited) return fail(err)
 
 					this.$.$mol_fail_log(err)
@@ -74,11 +59,6 @@ namespace $ {
 	
 				worker.on('message', e => {
 					if (destructing) return
-					if (! inited) this.$.$mol_log3_done({
-						place: `${this}.worker()`,
-						message: 'started',
-					})
-
 					if (! inited) done(worker)
 					inited = true
 					this.receive(e)
