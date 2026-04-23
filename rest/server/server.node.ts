@@ -2,6 +2,10 @@ namespace $ {
 	
 	export class $mol_rest_server extends $mol_object {
 		
+		log() {
+			return this.$.$mol_state_arg.value( 'mol_rest_server_log' ) !== null
+		}
+		
 		@ $mol_mem
 		port() {
 			return 0
@@ -51,10 +55,11 @@ namespace $ {
 			const port = $mol_rest_port_http.make({ output: res })
 			const msg = $mol_rest_message_http.make({ port, input: req })
 			
-			$mol_wire_sync( this.$ ).$mol_log3_rise({
+			if( this.log() ) $mol_wire_sync( this.$ ).$mol_log3_rise({
 				place: this,
 				message: msg.method(),
 				url: msg.uri(),
+				origin: msg.origin(),
 				remote: req.socket.remoteAddress + ':' + req.socket.remotePort
 			})
 			
@@ -73,6 +78,9 @@ namespace $ {
 				$mol_wire_sync( $$ ).$mol_log3_fail({
 					place: this,
 					message: error.message ?? '',
+					origin: msg.origin(),
+					address: msg.address(),
+					cause: error.cause,
 					stack: error.stack,
 				})
 				
@@ -92,12 +100,23 @@ namespace $ {
 			
 			const port = $mol_rest_port_ws_node.make({ socket })
 			const upgrade = $mol_rest_message_http.make({ port, input: req })
+			let protocol = ''
 			
 			try {
 				
-				$mol_wire_sync( this.root() ).REQUEST(
+				protocol = $mol_wire_sync( this.root() ).REQUEST(
 					upgrade.derive( 'OPEN', null )
 				)
+				
+				if( !protocol ) {
+					socket.write(
+						'HTTP/1.1 400 Bad Request\r\n' +
+						'\r\n' +
+						`Unsupported Protocols: ${ upgrade.protocols() }`
+					)
+					socket.end()
+					return
+				}
 				
 			} catch( error: any ) {
 				
@@ -106,6 +125,9 @@ namespace $ {
 				$mol_wire_sync( $$ ).$mol_log3_fail({
 					place: this,
 					message: error.message ?? '',
+					origin: upgrade.origin(),
+					address: upgrade.address(),
+					cause: error.cause,
 					stack: error.stack,
 				})
 				
@@ -115,15 +137,16 @@ namespace $ {
 			
 			const onclose = $mol_wire_async( ()=> {
 				
-				$mol_wire_sync( this.$ ).$mol_log3_done({
+				if( this.log() ) $mol_wire_sync( this.$ ).$mol_log3_done({
 					place: this,
 					message: 'CLOSE',
 					url: upgrade.uri(),
+					origin: upgrade.origin(),
 					port: $mol_key( port ),
 				})
 				
 				try {
-				
+					
 					$mol_wire_sync( this.root() ).REQUEST(
 						upgrade.derive( 'CLOSE', null )
 					)
@@ -135,6 +158,9 @@ namespace $ {
 					$mol_wire_sync( $$ ).$mol_log3_fail({
 						place: this,
 						message: error.message ?? '',
+						origin: upgrade.origin(),
+						address: upgrade.address(),
+						cause: error.cause,
 						stack: error.stack,
 					})
 					
@@ -157,13 +183,15 @@ namespace $ {
 				'Upgrade: WebSocket\r\n' +
 				'Connection: Upgrade\r\n' +
 				`Sec-WebSocket-Accept: ${key_out}\r\n` +
+				`Sec-WebSocket-Protocol: ${protocol}\r\n` +
 				'\r\n'
-			);
+			)
 			
-			$mol_wire_sync( this.$ ).$mol_log3_come({
+			if( this.log() ) $mol_wire_sync( this.$ ).$mol_log3_come({
 				place: this,
 				message: 'OPEN',
 				url: upgrade.uri(),
+				origin: upgrade.origin(),
 				port: $mol_key( port ),
 			})
 			
@@ -254,11 +282,12 @@ namespace $ {
 				const message = upgrade.derive( 'POST', data )
 				
 				if( data.length !== 0 ) {
-					this.$.$mol_log3_rise({
+					if( this.log() ) this.$.$mol_log3_rise({
 						place: this,
 						message: message.method(),
 						port: $mol_key( message.port ),
 						url: message.uri(),
+						origin: message.origin(),
 						frame: frame.toString(),
 					})
 					await $mol_wire_async( this.root() ).REQUEST( message )
@@ -273,6 +302,9 @@ namespace $ {
 				$$.$mol_log3_fail({
 					place: this,
 					message: error.message ?? '',
+					origin: upgrade.origin(),
+					address: upgrade.address(),
+					cause: error.cause,
 					stack: error.stack,
 				})
 				
@@ -286,6 +318,10 @@ namespace $ {
 		root( resource?: $mol_rest_resource ) {
 			$mol_wire_solid()
 			return resource ?? $mol_rest_resource.make({})
+		}
+		
+		;[ Symbol.for( 'nodejs.util.inspect.custom' ) ]() {
+			return $mol_term_color.blue( '$mol_rest_server' )
 		}
 		
 	}

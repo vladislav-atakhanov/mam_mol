@@ -1,8 +1,10 @@
 namespace $ {
 	
-	setTimeout( ()=> $mol_wire_async( $mol_build ).start( process.argv.slice( 2 ) ) )
-
-	
+	if ( $mol_rpc_worker.is_main() ) {
+		setTimeout( ()=> $mol_wire_async( $mol_build ).start( process.argv.slice( 2 ) ) )
+	} else {
+		new $mol_wire_atom( '$mol_build_checker', ()=> $.$mol_one.$mol_build_checker.start() ).fresh()
+	}
 
 	export class $mol_build extends $mol_object {
 		@ $mol_mem_key
@@ -17,6 +19,55 @@ namespace $ {
 		
 		static relative( root : string, paths: readonly string[] ) {
 			return this.$.$mol_build.root( [ $mol_file.relative( root ).path(), paths ])
+		}
+
+		@ $mol_mem_key
+		checker_rpc( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
+			const paths = this.tsPaths({ path , exclude , bundle })
+			if (! paths.length) return null
+
+			const handlers: $mol_build_checker_remote = {
+				write: rec => {
+					for (const [path, data] of rec) {
+						this.$.$mol_file.relative( path ).text( data, 'virt' )
+					}
+				},
+				error: rec => {
+					for (const [filename, error] of rec) {
+						this.js_error( filename , error )
+					}
+				},
+			}
+
+			const workerData: $mol_build_checker_worker_data = {
+				paths,
+				root: this.root().path(),
+				options: this.tsOptions(),
+			}
+
+			const maxOldGenerationSizeMb = this.checker_max_mem()
+
+			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<{
+				recheck(): void
+			}>>({
+				options: $mol_const({
+					resourceLimits: {
+						maxOldGenerationSizeMb,
+					},
+					workerData
+				}),
+				uri: () => __filename,
+				handlers: () => handlers,
+			})
+		}
+
+		checker_max_mem() {
+			return Number(this.$.$mol_env().MOL_BUILD_CHECKER_MAX_MEM || '2560')
+		}
+
+		checker( params: { path : string , bundle : string , exclude : readonly string[] } ) {
+			const checker = this.checker_rpc(params)
+			return checker?.remote() ?? null
 		}
 
 		@ $mol_mem
@@ -313,12 +364,6 @@ namespace $ {
 			if( res.errors.length ) throw res.errors
 			return res.options
 		}
-		
-		@ $mol_mem_key
-		tsSource( { path , target } : { path : string , target : number } ) {
-			const content = $mol_file.absolute( path ).text()
-			return $node.typescript.createSourceFile( path , content , target )
-		}
 
 		@ $mol_mem_key
 		tsPaths( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
@@ -338,33 +383,6 @@ namespace $ {
 			}
 
 			return sources.map( src => src.path() )
-		}
-
-		@ $mol_mem_key
-		tsHost( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			
-			const host = $node.typescript.createCompilerHost( this.tsOptions() )
-			
-			host.fileExists = ( path )=> $mol_file.relative( path ).exists()
-			host.readFile = ( path )=> $mol_file.relative( path ).text()
-			host.writeFile = ( path , text )=> $mol_file.relative( path ).text( text, 'virt' )
-			
-			return host
-		}
-
-		@ $mol_mem_key
-		tsTranspiler( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			return $node.typescript.createProgram(
-				this.tsPaths({ path , exclude , bundle }) ,
-				this.tsOptions() ,
-				this.tsHost({ path , exclude , bundle }) ,
-			)
-		}
-
-		@ $mol_mem_key
-		tsTranspile( { path , exclude , bundle } : { path : string , bundle : string , exclude : readonly string[] } ) {
-			const res = this.tsTranspiler({ path , exclude , bundle }).emit()
-			return res
 		}
 
 		@ $mol_mem_key
@@ -656,6 +674,7 @@ namespace $ {
 			this.bundle([ path , 'web.js' ])
 			this.bundle([ path , 'web.test.js' ])
 			this.bundle([ path , 'web.test.html' ])
+			this.bundle([ path , 'web.baza' ])
 			this.bundle([ path , 'web.view.tree' ])
 			this.bundle([ path , 'web.meta.tree' ])
 			this.bundle([ path , 'web.locale=en.json' ])
@@ -673,6 +692,7 @@ namespace $ {
 			this.bundle([ path , 'node.deps.json' ])
 			this.bundle([ path , 'node.js' ])
 			this.bundle([ path , 'node.test.js' ])
+			this.bundle([ path , 'node.baza' ])
 			this.bundle([ path , 'node.view.tree' ])
 			this.bundle([ path , 'node.meta.tree' ])
 			this.bundle([ path , 'node.locale=en.json' ])
@@ -697,6 +717,7 @@ namespace $ {
 			this.bundleAllNodeAudit(path)
 			
 			this.bundle([ path , 'package.json' ])
+			this.bundle([ path , 'manifest.json' ])
 			this.bundle([ path , 'readme.md' ])
 
 			this.bundleFiles( [ path , [ 'node' ] ] )
@@ -715,7 +736,7 @@ namespace $ {
 			var stages = [ 'test' , 'dev' ]
 			if( bundle ) {
 				
-				var [ bundle , tags , type , locale ] = /^(.*?)(?:\.(audit\.js|test\.js|test\.html|js|css|deps\.json|locale=(\w+)\.json))?$/.exec(
+				var [ bundle , tags , type , locale ] = /^(.*?)(?:\.(audit\.js|test\.js|test\.html|js|css|deps\.json|locale=(\w+)\.json|baza))?$/.exec(
 					bundle
 				)!
 				
@@ -756,6 +777,9 @@ namespace $ {
 					if( !type || type === 'view.tree' ) {
 						res = res.concat( this.bundleViewTree( { path , exclude , bundle : env } ) )
 					}
+					if( !type || type === 'baza' ) {
+						res = res.concat( this.bundleBaza( { path , exclude , bundle : env } ) )
+					}
 					if( !type || type === 'meta.tree' ) {
 						res = res.concat( this.bundleMetaTree( { path , exclude , bundle : env } ) )
 					}
@@ -777,6 +801,10 @@ namespace $ {
 				res = res.concat( this.bundlePackageJSON( [ path , [ 'web', 'test' ] ] ) )
 			}
 			
+			if( !bundle || bundle === 'manifest.json' ) {
+				res = res.concat( this.bundleManifestJSON( [ path , [ 'node' , 'test' ] ] ) )
+			}
+
 			if( !bundle || bundle === 'readme.md' ) {
 				res = res.concat( this.bundleReadmeMd( [ path , [ 'web' ] ] ) )
 			}
@@ -886,6 +914,10 @@ namespace $ {
 			return [ targetMJS, targetJSMap ]
 		}
 
+		checker_synced() {
+			return Boolean(this.$.$mol_env().MAM_BUILD_CHECKER_SYNCED)
+		}
+
 		@ $mol_mem_key
 		bundleAuditJS( { path , exclude , bundle } : { path : string , exclude : readonly string[] , bundle : string } ) : $mol_file[] {
 
@@ -895,10 +927,15 @@ namespace $ {
 			var target = pack.resolve( `-/${bundle}.audit.js` )
 			var exclude_ext = exclude.filter( ex => ex !== 'test' && ex !== 'dev' )
 
-			this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
-			
-			const errors = [] as Error[]
+	
+			if (this.checker_synced()) {
+				this.tsService({ path , exclude : exclude_ext , bundle })?.recheck()
+			} else {
+				const checker = this.checker({ path , exclude: exclude_ext , bundle })
+				checker?.recheck()
+			}
 
+			const errors = [] as Error[]
 			const paths = this.tsPaths({ path , exclude: exclude_ext , bundle })
 
 			for( const path of paths ) {
@@ -1097,6 +1134,25 @@ namespace $ {
 		}
 		
 		@ $mol_mem_key
+		bundleBaza( { path , exclude , bundle } : { path : string , exclude? : readonly string[] , bundle : string } ) : $mol_file[] {
+			
+			const start = this.now()
+			const pack = $mol_file.absolute( path )
+			
+			const target = pack.resolve( `-/${bundle}.baza` )
+			
+			const sources = this.sourcesAll([ path , exclude ])
+				.filter( src => /baza$/.test( src.ext() ) )
+			if( sources.length === 0 ) return []
+			
+			target.buffer( new Uint8Array( sources.flatMap( src => [ ... src.buffer() ] ) ) )
+			
+			this.logBundle( target , Date.now() - start )
+			return [ target ]
+			
+		}
+		
+		@ $mol_mem_key
 		bundleMetaTree( { path , exclude , bundle } : { path : string , exclude? : readonly string[] , bundle : string } ) : $mol_file[] {
 			const start = this.now()
 			var pack = $mol_file.absolute( path )
@@ -1254,6 +1310,40 @@ namespace $ {
 			
 			this.logBundle( target , Date.now() - start )
 			
+			return [ target ]
+		}
+
+		@ $mol_mem_key
+		bundleManifestJSON( [ path , exclude ] : [ path : string , exclude? : readonly string[] ] ) : $mol_file[] {
+
+			var pack = $mol_file.absolute( path )
+
+			if( this.sourcesAll( [ path , exclude ] ).length === 0 ) return []
+
+			const start = this.now()
+			var target = pack.resolve( `-/manifest.json` )
+			let name = pack.relate( this.root() ).replace( /\//g , '_' )
+
+			const json = {
+				name ,
+				short_name : name ,
+				description : '' ,
+				id : name ,
+				start_url : '.' ,
+				display : 'standalone' as string ,
+				background_color : '#000000' ,
+				theme_color : '#000000' ,
+			}
+
+			const source = pack.resolve( `manifest.json` )
+			if( source.exists() ) {
+				Object.assign( json , JSON.parse( source.text() ) )
+			}
+
+			target.text( JSON.stringify( json , null , '\t' ) )
+
+			this.logBundle( target , Date.now() - start )
+
 			return [ target ]
 		}
 		

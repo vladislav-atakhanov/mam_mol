@@ -1,3 +1,7 @@
+@view-transition {
+	navigation: auto;
+}
+
 [mol_view] {
 	transition-property: height, width, min-height, min-width, max-width, max-height, transform, scale, translate, rotate;
 	transition-duration: .2s;
@@ -50,7 +54,7 @@
 	color: var(--mol_theme_text); */
 	contain: unset; /** Fixes bg ignoring when applied to body on Chrome */
 	tab-size: 4;
-	overscroll-behavior: contain; /** Disable navigation gestures **/
+	/*overscroll-behavior: contain; /** Disable navigation gestures **/
 }
 
 @media print {
