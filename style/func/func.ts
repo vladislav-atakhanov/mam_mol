@@ -162,8 +162,8 @@ namespace $ {
 			return new $mol_style_func(
 				"drop-shadow",
 				blur_radius
-					? [color, x_offset, y_offset, blur_radius]
-					: [color, x_offset, y_offset]
+					? [color, x_offset, y_offset, blur_radius] as const
+					: [color, x_offset, y_offset] as const
 			);
 		}
 		

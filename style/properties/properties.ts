@@ -2,9 +2,17 @@ namespace $ {
 
 	export type $mol_style_properties = Partial< $mol_type_override< CSSStyleDeclaration , Overrides > >
 
+
 	type Common =
 	| 'inherit' | 'initial' | 'unset' | 'revert' | 'revert-layer' | 'none'
 	| $mol_style_func< 'var' >
+
+	type Portion = `${number}${'%'}` | number
+
+	type Space = '' | ' '
+	type Var = `var(--${string})`
+	type Calc = `calc(${string})`
+	type Angle = number | `${number}${'deg' | 'turn'}` | Var | Calc | 'none'
 
 	export type $mol_style_properties_color =
 	| 'aliceblue' | 'antiquewhite' | 'aqua' | 'aquamarine' | 'azure'
@@ -37,6 +45,7 @@ namespace $ {
 	| 'transparent' | 'currentcolor'
 	| $mol_style_func< 'hsla' | 'rgba' | 'var' >
 	| `#${string}`
+	| `hsl(${Space}${Angle} ${Portion} ${Portion}${'' | `${Space}/${Space}${Portion}`}${Space})`
 	
 	type Length = 0 | `${number}${ $mol_style_unit_length }` | $mol_style_func< 'calc' | 'var' | 'clamp' >
 
