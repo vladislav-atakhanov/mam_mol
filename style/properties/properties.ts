@@ -253,7 +253,7 @@ namespace $ {
 		| Common
 
 		/** @see https://developer.mozilla.org/en-US/docs/Web/CSS/gap */
-		gap?: Length
+		gap?: Length | readonly [ Length , Length ] | Common
 
 		/** 
 		 * All background style properties.
@@ -339,6 +339,12 @@ namespace $ {
 			| 'none' | Common
 
 		}
+
+
+		/** @see https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/rx */
+		rx?: Length | Common
+		/** @see https://developer.mozilla.org/en-US/docs/Web/CSS/Reference/Properties/ry */
+		ry?: Length | Common
 
 		/** @see https://developer.mozilla.org/ru/docs/Web/CSS/font */
 		font?: {
@@ -643,6 +649,11 @@ namespace $ {
 
 		}
 
+		container?: {
+			name?: string
+			type?: Container_type | readonly Container_type[]
+		}
+
 		/** 
 		 * Z-order of a positioned element and its descendants or flex items. Overlapping elements with a larger z-index cover those with a smaller one.
 		 * @see https://developer.mozilla.org/en-US/docs/Web/CSS/z-index
@@ -656,5 +667,7 @@ namespace $ {
 		opacity: number | Common
 		
 	}
+
+	type Container_type = 'normal' | 'size' | 'inline-size' | 'scroll-state' | 'anchored'
 
 }
