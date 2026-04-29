@@ -67,11 +67,15 @@ namespace $ {
 
 		protected writes = [] as [path: string, data: string][]
 		protected errors = [] as [filename: string, error: string][]
+		protected changes_tick = null as null | $mol_after_tick
 
 		@ $mol_action
 		protected changes_cut(): $mol_build_checker_changes | null {
 			const writes = this.writes
 			const errors = this.errors
+
+			this.changes_tick?.destructor()
+			this.changes_tick = null
 
 			if (! errors.length && ! writes.length ) return null
 
@@ -84,14 +88,12 @@ namespace $ {
 		changes_flush() {
 			const changes = this.changes_cut()
 			if (! changes ) return
-
 			$mol_error_fence(() => this.remote().changes(changes), e => ($mol_fail_log(e), null))
 		}
 
 		protected changes_schedule() {
 			if (this.status() !== 'watching') return
-
-			$mol_wire_async(this).changes_flush()
+			this.changes_tick = this.changes_tick ?? new $mol_after_tick(() => $mol_wire_async(this).changes_flush())
 		}
 
 		protected write_add(path: string, data: string) {
