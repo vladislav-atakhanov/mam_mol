@@ -23,19 +23,10 @@ namespace $ {
 	}
 
 	export class $mol_build_checker extends $mol_object {
-		@ $mol_mem
-		paths(next?: readonly string[]): readonly string[] {
-			return next ?? this.worker_data().paths ?? []
-		}
-
-		@ $mol_mem
-		root(next?: string): string {
-			return next ?? this.worker_data().root ?? ''
-		}
-
-		@ $mol_mem
-		options(next?: ReturnType<typeof $node.typescript.getDefaultCompilerOptions>) {
-			return next ?? this.worker_data().options ?? $node.typescript.getDefaultCompilerOptions()
+		paths() { return this.worker_data().paths ?? [] }
+		root() { return this.worker_data().root ?? '' }
+		options() {
+			return this.worker_data().options ?? $node.typescript.getDefaultCompilerOptions()
 		}
 
 		@ $mol_mem
@@ -52,14 +43,15 @@ namespace $ {
 		start() {
 			try {
 				this.remote()
-				this.host()
 				this.status('ready')
+				this.host_enabled()
 			} catch(error) {
 				if ($mol_promise_like(error)) $mol_fail_hidden(error)
 				this.$.$mol_fail_log(error)
 				process.exit(1)
 			}
 		}
+
 
 		protected run() {}
 
@@ -68,7 +60,7 @@ namespace $ {
 
 		protected writes = [] as [path: string, data: string][]
 		protected errors = [] as [filename: string, error: string][]
-		protected changes_tick = null as null | $mol_after_tick
+		protected changes_tick = null as null | undefined | $mol_after_tick
 
 		@ $mol_action
 		protected changes_cut(): $mol_build_checker_changes | null {
@@ -93,7 +85,10 @@ namespace $ {
 		}
 
 		protected changes_schedule() {
-			if (this.status() !== 'watching') return
+			// this.status() not used here to prevent host restarting
+			// ts watcher calls it in host syncronously
+			if (this.changes_tick === undefined) return
+			if (this.changes_tick !== null) return
 			this.changes_tick = this.changes_tick ?? new $mol_after_tick(() => $mol_wire_async(this).changes_flush())
 		}
 
@@ -133,7 +128,10 @@ namespace $ {
 
 		@ $mol_mem
 		status(next?: $mol_build_checker_status | null) {
-			if (next === 'checking') this.changes_flush() // flush watcher collected
+			if (next === 'checking') {
+				this.changes_tick?.destructor()
+				this.changes_tick = undefined // disable watch sending
+			}
 
 			if (next) this.remote().status(next)
 
@@ -142,13 +140,14 @@ namespace $ {
 
 		@ $mol_mem
 		protected host_enabled() {
-			return this.status() === 'watching' || this.status() === 'checking'
+			const status = this.status()
+			if (! status || status === 'ready') return null
+			this.host()
+			return null
 		}
 
 		@ $mol_mem
 		protected host() {
-			if (! this.host_enabled()) return null
-
 			const paths = this.paths()
 			if (! paths.length) return null
 			const options = this.options()
