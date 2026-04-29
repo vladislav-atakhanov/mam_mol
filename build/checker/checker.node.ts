@@ -1,8 +1,19 @@
 namespace $ {
 
+	export type $mol_build_checker_status = 'ready' | 'watching' | 'checking'
+
+	export type $mol_build_checker_shared = {
+		recheck(): $mol_build_checker_changes | null
+	}
+
 	export type $mol_build_checker_remote = {
-		error(rec: [filename: string, error: string][]): void
-		write(rec: [path: string, data: string][]): void
+		changes(rec: $mol_build_checker_changes): void
+		status(next: $mol_build_checker_status): void
+	}
+
+	export type $mol_build_checker_changes = {
+		writes: [path: string, data: string][]
+		errors: [path: string, error: string][]
 	}
 
 	export type $mol_build_checker_worker_data = {
@@ -40,7 +51,7 @@ namespace $ {
 
 		start() {
 			try {
-				this.remote()
+				this.status('ready')
 				this.host()
 			} catch(error) {
 				if ($mol_promise_like(error)) $mol_fail_hidden(error)
@@ -55,43 +66,42 @@ namespace $ {
 		protected watchers = new Map< string , ( path : string , kind : number )=> void >()
 
 		protected writes = [] as [path: string, data: string][]
-
-		@ $mol_action
-		writes_cut() {
-			const writes = this.writes
-			this.writes = []
-			return writes
-		}
-
-		write_flush() {
-			const writes = this.writes_cut()
-			if (! writes.length) return
-			$mol_error_fence(() => this.remote().write(writes), e => ($mol_fail_log(e), null))
-		}
-
-		write_add(path: string, data: string) {
-			if (! this.writes.length) new $mol_after_tick(() => $mol_wire_async(this).write_flush())
-			this.writes.push([ path, data ])
-		}
-
 		protected errors = [] as [filename: string, error: string][]
 
 		@ $mol_action
-		errors_cut() {
+		protected changes_cut(): $mol_build_checker_changes | null {
+			const writes = this.writes
 			const errors = this.errors
+
+			if (! errors.length && ! writes.length ) return null
+
+			this.writes = []
 			this.errors = []
-			return errors
+
+			return { writes, errors }
 		}
 
-		errors_flush() {
-			const errors = this.errors_cut()
-			if (! errors.length) return
-			$mol_error_fence(() => this.remote().error(errors), e => ($mol_fail_log(e), null))
+		changes_flush() {
+			const changes = this.changes_cut()
+			if (! changes ) return
+
+			$mol_error_fence(() => this.remote().changes(changes), e => ($mol_fail_log(e), null))
+		}
+
+		protected changes_schedule() {
+			if (this.status() !== 'watching') return
+
+			$mol_wire_async(this).changes_flush()
+		}
+
+		protected write_add(path: string, data: string) {
+			this.writes.push([ path, data ])
+			this.changes_schedule()
 		}
 
 		protected error_add(filename: string, error: string) {
-			if (! this.errors.length) new $mol_after_tick(() => $mol_wire_async(this).errors_flush())
 			this.errors.push([filename, error])
+			this.changes_schedule()
 		}
 
 		@ $mol_action
@@ -111,15 +121,29 @@ namespace $ {
 		}
 
 		recheck() {
-			this.host()
+			this.status('checking')
+			this.host() // wait host started
 			this.recheck_internal()
-			this.errors_flush()
-			this.write_flush()
-			return null
+			this.status('watching')
+			return this.changes_cut()
+		}
+
+		@ $mol_mem
+		status(next?: $mol_build_checker_status | null) {
+			if (next) this.remote().status(next)
+
+			return next ?? null
+		}
+
+		@ $mol_mem
+		protected host_enabled() {
+			return this.status() === 'watching' || this.status() === 'checking'
 		}
 
 		@ $mol_mem
 		protected host() {
+			if (! this.host_enabled()) return null
+
 			const paths = this.paths()
 			if (! paths.length) return null
 			const options = this.options()
