@@ -49,6 +49,9 @@ namespace $ {
 			},
 
 			'': (left, belt, context) => {
+				deprecated.call(this, left)
+				bindings.call(this, left)
+
 				let right
 				const operator = left.kids[0]
 
@@ -82,6 +85,39 @@ namespace $ {
 		for (const prop of props_root ) add_inner(prop)
 		
 		return Object.values(props_inner)
+	}
+
+	function deprecated(this: $, input: $mol_tree2) {
+		const writable = input.type.indexOf('?')
+		const param = input.type.indexOf('!')
+		let normalized = input.type
+		if (writable !== -1) normalized = normalized.substring(0, writable + 1)
+		if (param !== -1) normalized = `${normalized.substring(0, param)}*${writable === -1 ? '' : '?'}`
+		if (normalized !== input.type) console.warn(`Syntax ${input.type} is deprecated. Use ${normalized} instead`)
+	}
+
+	const is_writable = (input: $mol_tree2) => input.type.includes('?')
+	function ensure_writable(this: $, input?: $mol_tree2) {
+		if (input && !is_writable(input)) this.$mol_fail(err`Expected writable at ${input.span}`)
+	}
+	function ensure_readonly(this: $, input?: $mol_tree2) {
+		if (input && is_writable(input)) this.$mol_fail(err`Expected readonly at ${input.span}`)
+	}
+	function bindings(this: $, left: $mol_tree2) {
+		const operator = left.kids[0]
+		switch (operator?.type) {
+			case '<=>':
+				ensure_writable.call(this, left)
+				ensure_writable.call(this, operator.kids[0])
+				break
+			case '=>':
+				const right = operator.kids[0]
+				if (right && is_writable(left) !== is_writable(right)) this.$mol_fail(err`Left and right operands are not compatible at ${operator.span}`)
+				break
+			case '<=':
+				ensure_readonly.call(this, left)
+				break
+		}
 	}
 
 }
