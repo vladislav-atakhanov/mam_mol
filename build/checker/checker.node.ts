@@ -51,8 +51,9 @@ namespace $ {
 
 		start() {
 			try {
-				this.status('ready')
+				this.remote()
 				this.host()
+				this.status('ready')
 			} catch(error) {
 				if ($mol_promise_like(error)) $mol_fail_hidden(error)
 				this.$.$mol_fail_log(error)
