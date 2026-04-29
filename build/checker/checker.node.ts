@@ -27,23 +27,6 @@ namespace $ {
 			return next ?? this.worker_data().options ?? $node.typescript.getDefaultCompilerOptions()
 		}
 
-		protected writes = [] as [path: string, data: string][]
-		protected write_timeout = null as null | $mol_after_timeout
-
-		protected write_flush() {
-			this.write_timeout?.destructor()
-
-			$mol_error_fence(() => this.remote().write(this.writes), e => (this.$.$mol_fail_log(e), null))
-
-			this.writes = []
-			this.write_timeout = null
-		}
-
-		write_add(path: string, data: string) {
-			this.writes.push([ path, data ])
-			this.write_timeout = this.write_timeout ?? new $mol_after_timeout(200, $mol_wire_async(() => this.write_flush()))
-		}
-
 		@ $mol_mem
 		protected rpc() {
 			return this.$.$mol_rpc_worker.make<typeof $mol_rpc_worker<$mol_build_checker_remote>>({
@@ -71,25 +54,44 @@ namespace $ {
 		protected versions = {} as Record<string, number>
 		protected watchers = new Map< string , ( path : string , kind : number )=> void >()
 
-
-		protected errors = [] as [filename: string, error: string][]
-		protected errors_timer = null as null | $mol_after_timeout
-
-		protected error_add(filename: string, error: string) {
-			this.errors.push([filename, error])
-			this.errors_timer = this.errors_timer ?? new $mol_after_timeout(200, $mol_wire_async(() => this.errors_flush()))
-		}
+		protected writes = [] as [path: string, data: string][]
 
 		@ $mol_action
-		protected errors_flush() {
-			this.errors_timer?.destructor()
-			$mol_error_fence(
-				() => this.remote().error(this.errors),
-				e => (this.$.$mol_fail_log(e), null)
-			)
+		writes_cut() {
+			const writes = this.writes
+			this.writes = []
+			return writes
+		}
 
+		write_flush() {
+			const writes = this.writes_cut()
+			if (! writes.length) return
+			$mol_error_fence(() => this.remote().write(writes), e => ($mol_fail_log(e), null))
+		}
+
+		write_add(path: string, data: string) {
+			if (! this.writes.length) new $mol_after_tick(() => $mol_wire_async(this).write_flush())
+			this.writes.push([ path, data ])
+		}
+
+		protected errors = [] as [filename: string, error: string][]
+
+		@ $mol_action
+		errors_cut() {
+			const errors = this.errors
 			this.errors = []
-			this.errors_timer = null
+			return errors
+		}
+
+		errors_flush() {
+			const errors = this.errors_cut()
+			if (! errors.length) return
+			$mol_error_fence(() => this.remote().error(errors), e => ($mol_fail_log(e), null))
+		}
+
+		protected error_add(filename: string, error: string) {
+			if (! this.errors.length) new $mol_after_tick(() => $mol_wire_async(this).errors_flush())
+			this.errors.push([filename, error])
 		}
 
 		@ $mol_action
@@ -112,7 +114,7 @@ namespace $ {
 			this.host()
 			this.recheck_internal()
 			this.errors_flush()
-			// this.write_flush()
+			this.write_flush()
 			return null
 		}
 
