@@ -133,10 +133,7 @@ namespace $ {
 
 		@ $mol_mem
 		status(next?: $mol_build_checker_status | null) {
-			if (next === 'checking') {
-				this.changes_tick?.destructor()
-				this.changes_tick = null
-			}
+			if (next === 'checking') this.changes_flush() // flush watcher collected
 
 			if (next) this.remote().status(next)
 
