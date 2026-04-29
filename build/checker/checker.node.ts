@@ -89,7 +89,7 @@ namespace $ {
 			// ts watcher calls it in host syncronously
 			if (this.changes_tick === undefined) return
 			if (this.changes_tick !== null) return
-			this.changes_tick = this.changes_tick ?? new $mol_after_tick(() => $mol_wire_async(this).changes_flush())
+			this.changes_tick = new $mol_after_tick(() => $mol_wire_async(this).changes_flush())
 		}
 
 		protected write_add(path: string, data: string) {
