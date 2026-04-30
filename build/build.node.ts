@@ -732,6 +732,7 @@ namespace $ {
 		@ $mol_mem_key
 		bundle( [ path , bundle = '' ] : [ path : string , bundle? : string ] ) {
 			
+			console.log('!!! bundle 1', path, bundle)
 			bundle = bundle && bundle.replace( /\.map$/ , '' )
 			
 			var envsDef = [ 'web' , 'node' ]
@@ -752,6 +753,7 @@ namespace $ {
 			
 			var res : $mol_file[] = []
 			
+			console.log('!!! bundle 2', path, bundle)
 			envs.forEach(
 				env => {
 					var exclude = envsDef.filter( e => e !== env ).concat( stages )
@@ -823,6 +825,7 @@ namespace $ {
 			if( !bundle || /\//.test( bundle ) ) {
 				res = res.concat( this.bundleFiles( [ path , [ 'node' ] ] ) )
 			}
+			console.log('!!! bundle 3', path, bundle)
 			
 			return res
 		}
