@@ -1,6 +1,6 @@
 namespace $ {
 
-	export type $mol_build_checker_status = 'ready' | 'watching' | 'checking'
+	export type $mol_build_checker_status = 'ready' | 'watching'
 
 	export type $mol_build_checker_shared = {
 		recheck(): $mol_build_checker_changes | null
@@ -42,9 +42,9 @@ namespace $ {
 
 		start() {
 			try {
-				this.remote()
-				this.status('ready')
-				this.host_enabled()
+				const watching = this.watching()
+				if (watching) this.host()
+				this.remote().status(watching ? 'watching' : 'ready')
 			} catch(error) {
 				if ($mol_promise_like(error)) $mol_fail_hidden(error)
 				this.$.$mol_fail_log(error)
@@ -85,7 +85,6 @@ namespace $ {
 		}
 
 		protected changes_schedule() {
-			// this.status() not used here to prevent host restarting
 			// ts watcher calls it in host syncronously
 			if (this.changes_tick === undefined) return
 			if (this.changes_tick !== null) return
@@ -118,33 +117,28 @@ namespace $ {
 			this.run()
 		}
 
+		protected lock = new $mol_lock
+
 		recheck() {
-			this.status('checking')
-			this.host() // wait host started
-			this.recheck_internal()
-			this.status('watching')
+			const unlock = this.lock.grab()
+			this.changes_tick?.destructor()
+			this.changes_tick = undefined // disable watch sending
+			this.watching(true)
+
+			try {
+				this.host() // wait host started and enable pull in start
+				this.recheck_internal()
+			} catch (e) {
+				if (! $mol_promise_like(e)) unlock()
+				$mol_fail_hidden(e)
+			}
+			unlock()
+
 			return this.changes_cut()
 		}
 
 		@ $mol_mem
-		status(next?: $mol_build_checker_status | null) {
-			if (next === 'checking') {
-				this.changes_tick?.destructor()
-				this.changes_tick = undefined // disable watch sending
-			}
-
-			if (next) this.remote().status(next)
-
-			return next ?? null
-		}
-
-		@ $mol_mem
-		protected host_enabled() {
-			const status = this.status()
-			if (! status || status === 'ready') return null
-			this.host()
-			return null
-		}
+		protected watching(next?: boolean) { return next ?? false }
 
 		@ $mol_mem
 		protected host() {
