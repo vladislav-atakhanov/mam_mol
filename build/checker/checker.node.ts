@@ -117,23 +117,13 @@ namespace $ {
 			this.run()
 		}
 
-		protected lock = new $mol_lock
-
+		// Do not place async logic here, to prevent recheck calls race
 		recheck() {
-			const unlock = this.lock.grab()
 			this.changes_tick?.destructor()
 			this.changes_tick = undefined // disable watch sending
-			this.watching(true)
-
-			try {
-				this.host() // wait host started and enable pull in start
-				this.recheck_internal()
-			} catch (e) {
-				if (! $mol_promise_like(e)) unlock()
-				$mol_fail_hidden(e)
-			}
-			unlock()
-
+			this.watching(true) // enable host pull in start
+			this.host() // wait host started
+			this.recheck_internal()
 			return this.changes_cut()
 		}
 
