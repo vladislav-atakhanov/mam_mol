@@ -97,25 +97,20 @@ namespace $ {
 	}
 
 	const is_writable = (input: $mol_tree2) => input.type.includes('?')
-	function ensure_writable(this: $, input?: $mol_tree2) {
-		if (input && !is_writable(input)) this.$mol_fail(err`Expected writable at ${input.span}`)
-	}
-	function ensure_readonly(this: $, input?: $mol_tree2) {
-		if (input && is_writable(input)) this.$mol_fail(err`Expected readonly at ${input.span}`)
-	}
 	function bindings(this: $, left: $mol_tree2) {
 		const operator = left.kids[0]
+		const right = operator?.kids[0]
 		switch (operator?.type) {
 			case '<=>':
-				ensure_writable.call(this, left)
-				ensure_writable.call(this, operator.kids[0])
+				if (!is_writable(left)) this.$mol_fail(err`Expected writable at ${left.span}`)
+				if (right && !is_writable(right)) this.$mol_fail(err`Expected writable at ${right.span}`)
 				break
 			case '=>':
-				const right = operator.kids[0]
-				if (right && is_writable(left) !== is_writable(right)) this.$mol_fail(err`Left and right operands are not compatible at ${operator.span}`)
+				if (right && is_writable(left) !== is_writable(right))
+					this.$mol_fail(err`Left and right operands are not compatible at ${operator.span}`)
 				break
 			case '<=':
-				ensure_readonly.call(this, left)
+				this.$mol_fail(err`Expected readonly at ${left.span}`)
 				break
 		}
 	}
