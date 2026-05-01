@@ -5,12 +5,6 @@ namespace $.$$ {
 	 * @see https://mol.hyoo.ru/#!section=demos/demo=mol_form_demo
 	 */
 	export class $mol_form extends $.$mol_form {
-
-		@ $mol_mem
-		dom_name() {
-			const inner = this.view_find( view => view !== this && view instanceof $mol_form ).next()
-			return inner.value ? super.dom_name() : "form"
-		}
 		
 		@ $mol_mem
 		form_fields() {
@@ -48,7 +42,7 @@ namespace $.$$ {
 
 		@ $mol_action
 		override submit( next? : Event ) {
-			next?.preventDefault()
+			
 			try {
 				if (! this.submit_allowed() ) {
 					throw new Error('Form invalid')

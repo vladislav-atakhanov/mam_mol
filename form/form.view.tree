@@ -4,7 +4,6 @@ $mol_form $mol_list
 	event *
 		^
 		keydown?event <=> keydown?event null
-		submit? <=> submit? null
 	save?event null
 	message_done @ \Saved
 	errors *string
@@ -16,7 +15,6 @@ $mol_form $mol_list
 		<= Foot $mol_row
 			sub <= foot <= buttons /$mol_view
 				<= Submit $mol_button_major
-					dom_name <= submit_dom_name \button
 					title <= submit_title @ \Save
 					hint <= submit_hint \
 					activate? => submit_activate?
