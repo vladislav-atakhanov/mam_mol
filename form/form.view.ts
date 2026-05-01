@@ -42,7 +42,7 @@ namespace $.$$ {
 
 		@ $mol_action
 		override submit( next? : Event ) {
-			
+			next?.preventDefault()
 			try {
 				if (! this.submit_allowed() ) {
 					throw new Error('Form invalid')
