@@ -8,12 +8,17 @@ namespace $ {
 	) {
 		let props = this.$mol_view_tree2_class_super( klass )
 		
-		// ! syntax to *
+		// ! syntax to * and ?val syntax to ?
 		props = props.clone(
 			props.hack({
 				'': ( node, belt )=> {
-					const normal = node.type.replace( /!\w+/, '*' )
+					const next = node.type.indexOf('?')
+					const id = node.type.indexOf('!')
+					let normal = node.type
+					if (next !== -1) normal = normal.substring(0, next + 1)
+					if (id !== -1) normal = `${normal.substring(0, id)}*${next === -1 ? '' : '?'}`
 					if( node.type === normal ) return [ node.clone( node.hack( belt ) ) ]
+					console.warn(`Syntax ${node.type} is deprecated. Use ${normal} instead`)
 					return [ node.struct( normal, node.hack( belt ) ) ]
 				}
 			})
@@ -49,7 +54,6 @@ namespace $ {
 			},
 
 			'': (left, belt, context) => {
-				deprecated.call(this, left)
 				bindings.call(this, left)
 
 				let right
@@ -85,15 +89,6 @@ namespace $ {
 		for (const prop of props_root ) add_inner(prop)
 		
 		return Object.values(props_inner)
-	}
-
-	function deprecated(this: $, input: $mol_tree2) {
-		const writable = input.type.indexOf('?')
-		const param = input.type.indexOf('!')
-		let normalized = input.type
-		if (writable !== -1) normalized = normalized.substring(0, writable + 1)
-		if (param !== -1) normalized = `${normalized.substring(0, param)}*${writable === -1 ? '' : '?'}`
-		if (normalized !== input.type) console.warn(`Syntax ${input.type} is deprecated. Use ${normalized} instead`)
 	}
 
 	const is_writable = (input: $mol_tree2) => input.type.includes('?')
