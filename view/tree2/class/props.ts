@@ -2,6 +2,8 @@ namespace $ {
 	const err = $mol_view_tree2_error_str
 	type Context = { factory?: $mol_tree2 }
 
+	const is_writable = (input: $mol_tree2) => input.type.includes('?')
+
 	export function $mol_view_tree2_class_props(
 		this: $,
 		klass : $mol_tree2,
@@ -42,8 +44,6 @@ namespace $ {
 
 			return [ operator.clone([ prop.clone([]) ]) ]
 		}
-
-		const is_writable = (input: $mol_tree2) => input.type.includes('?')
 
 		const props_root = props.hack({
 			'<=': upper,
