@@ -43,6 +43,8 @@ namespace $ {
 			return [ operator.clone([ prop.clone([]) ]) ]
 		}
 
+		const is_writable = (input: $mol_tree2) => input.type.includes('?')
+
 		const props_root = props.hack({
 			'<=': upper,
 
@@ -54,7 +56,6 @@ namespace $ {
 			},
 
 			'': (left, belt, context) => {
-				bindings.call(this, left)
 
 				let right
 				const operator = left.kids[0]
@@ -63,6 +64,8 @@ namespace $ {
 					right = operator.kids[0]
 					if (! right) this.$mol_fail(err`Need a child ${operator.span}`)
 					if (! context.factory) this.$mol_fail(err`Need a parent ${left.span}`)
+					if ( is_writable( left ) !== is_writable( right ) )
+						this.$mol_fail(err`Left and right operands are not compatible at ${operator.span}`)
 
 					add_inner(right.clone([
 						right.struct('=', [
@@ -72,6 +75,13 @@ namespace $ {
 							),
 						]),
 					]))
+				} else if (operator?.type === "<=>") {
+					const right = operator.kids[0]
+					if (! right) this.$mol_fail(err`Need a child ${operator.span}`)
+					if (! is_writable(left)) this.$mol_fail(err`Expected writable at ${left.span}`)
+					if (! is_writable(right)) this.$mol_fail(err`Expected writable at ${right.span}`)
+				} else if (operator?.type === "<=" && is_writable(left)) {
+					this.$mol_fail(err`Expected readonly at ${left.span}`)
 				}
 
 				if (right) context = { factory: right.clone([]) }
@@ -90,24 +100,4 @@ namespace $ {
 		
 		return Object.values(props_inner)
 	}
-
-	const is_writable = (input: $mol_tree2) => input.type.includes('?')
-	function bindings(this: $, left: $mol_tree2) {
-		const operator = left.kids[0]
-		const right = operator?.kids[0]
-		switch (operator?.type) {
-			case '<=>':
-				if (!is_writable(left)) this.$mol_fail(err`Expected writable at ${left.span}`)
-				if (right && !is_writable(right)) this.$mol_fail(err`Expected writable at ${right.span}`)
-				break
-			case '=>':
-				if (right && is_writable(left) !== is_writable(right))
-					this.$mol_fail(err`Left and right operands are not compatible at ${operator.span}`)
-				break
-			case '<=':
-				this.$mol_fail(err`Expected readonly at ${left.span}`)
-				break
-		}
-	}
-
 }
