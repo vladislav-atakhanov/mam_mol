@@ -1,7 +1,6 @@
 namespace $ {
 	const err = $mol_view_tree2_error_str
 	type Context = { factory?: $mol_tree2 }
-
 	const is_writable = (input: $mol_tree2) => input.type.includes('?')
 
 	export function $mol_view_tree2_class_props(
@@ -56,7 +55,6 @@ namespace $ {
 			},
 
 			'': (left, belt, context) => {
-
 				let right
 				const operator = left.kids[0]
 
